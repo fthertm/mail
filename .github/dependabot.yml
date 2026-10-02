@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/mail-worker"
+      - "/mail-vue"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    # Sürüm (güvenlik dışı) güncellemelerini kapatır; güvenlik güncellemeleri etkilenmez.
+    ignore:
+      - dependency-name: "*"
+    labels:
+      - "security"
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+    labels:
+      - "security"
+      - "dependencies"

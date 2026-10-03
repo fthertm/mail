@@ -1,10 +1,12 @@
 <template>
   <div class="mail-list-page">
     <emailScroll ref="scroll"
+                 type="archive"
                  :cancel-success="cancelStar"
                  :star-success="addStar"
                  :getEmailList="getEmailList"
                  :emailDelete="emailDelete"
+                 :email-unread="emailUnread"
                  :email-read="emailRead"
                  :star-add="starAdd"
                  :star-cancel="starCancel"
@@ -19,7 +21,7 @@
 import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import emailScroll from "@/components/email-scroll/index.vue"
-import {emailList, emailDelete, emailRead} from "@/request/email.js";
+import {emailList, emailDelete, emailRead, emailUnread} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
 import {defineOptions, onMounted, ref} from "vue";
 import router from "@/router/index.js";

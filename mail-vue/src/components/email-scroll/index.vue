@@ -24,13 +24,7 @@
              below can hand all four filters an equal share of the full row
              width instead of splitting it with an action group. -->
         <div class="mobile-filter-actions">
-          <button
-              class="mobile-tool-button nova-mobile-icon-button mobile-sort"
-              :aria-label="t('sortByTime')"
-              @click="mobileSortClick"
-          >
-            <Icon icon="solar:sort-vertical-linear" width="21" height="21" />
-          </button>
+          <MailSortButton mobile :time-sort="timeSort" @toggle="mobileSortClick" />
 
           <button
               class="mobile-tool-button nova-mobile-icon-button"
@@ -73,12 +67,37 @@
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
         <slot name="first"></slot>
-        <AppIcon v-perm="'email:delete'" class="icon delete" name="nova-sidebar-trash" :size="18" inline
-              v-if="getSelectedMailsIds().length > 0"
-              @click="handleDelete"/>
+        <template v-if="getSelectedMailsIds().length > 0">
+          <el-tooltip v-if="typeof props.emailArchive === 'function'" effect="dark" :content="t('archive')" :show-after="1200">
+            <button
+                v-perm="'email:delete'"
+                class="nova-icon-button nova-toolbar-button selection-action"
+                type="button"
+                :aria-label="t('archive')"
+                @click="handleArchive"
+            >
+              <AppIcon name="nova-sidebar-archive" :size="20" inline />
+            </button>
+          </el-tooltip>
+          <el-tooltip v-perm="'email:delete'" effect="dark" :content="t('delete')" :show-after="1200">
+            <button
+                class="nova-icon-button nova-toolbar-button nova-danger-button selection-action"
+                type="button"
+                :aria-label="t('delete')"
+                @click="handleDelete"
+            >
+              <AppIcon name="nova-sidebar-trash" :size="20" inline />
+            </button>
+          </el-tooltip>
+        </template>
       </div>
 
       <div class="header-right">
+        <MailSortButton
+            v-if="type === 'email' && !isPhone"
+            :time-sort="timeSort"
+            @toggle="mobileSortClick"
+        />
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
         <AppIcon v-if="showAccountIcon" class="more-icon icon" name="more-vertical" :size="18"
               @click="changeAccountShow"/>
@@ -390,6 +409,7 @@ import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'
 import { useScroll } from '@vueuse/core'
 import SenderAvatar from '@/components/sender-avatar/index.vue'
+import MailSortButton from '@/components/mail-sort-button/index.vue'
 import { MAIL_BODY_TYPE, unwrapNestedMessage, looksLikeMarkdownDocument } from '@/utils/mail-html.js'
 import { stripMarkdown } from '@/utils/quoted-text.js'
 import { nextPageCursor, isLastPage, canRequestPage } from '@/utils/mail-pagination.js'
@@ -404,7 +424,6 @@ import {
   swipeCommitDistance,
 } from '@/utils/swipe-actions.js'
 import { showUndoSnackbar } from '@/utils/undo-snackbar.js'
-import { captureListPreview } from '@/utils/mail-transition.js'
 
 const props = defineProps({
   getEmailList: Function,
@@ -1252,6 +1271,26 @@ function rightDelete(emailId) {
   })
 }
 
+function handleArchive() {
+  const emailIds = getSelectedMailsIds()
+  if (!emailIds.length || typeof props.emailArchive !== 'function') return
+
+  // Remove from every affected list immediately, then let the existing archive
+  // mutation provide the authoritative state. A failed request restores the
+  // current list from the server.
+  emailStore.deleteIds = emailIds
+  props.emailArchive(emailIds).then(() => {
+    ElMessage({
+      message: t('archiveSuccessMsg'),
+      type: 'success',
+      plain: true
+    })
+  }).catch(error => {
+    refreshList()
+    console.error(error)
+  })
+}
+
 function handleSearch(type, value) {
   emit('right-search', type, value);
 }
@@ -1471,11 +1510,6 @@ function jumpDetails(email, event) {
       return
     }
   }
-
-  // Snapshot the row before the list is replaced by the reader, so the opened
-  // message can grow out of the preview that was clicked (and shrink back into
-  // it on the way out).
-  captureListPreview(event?.currentTarget)
 
   emit('jump', email)
 }
@@ -2028,6 +2062,7 @@ function loadData() {
     margin-top: 8px;
     margin-left: 15px;
   }
+
 }
 
 .del-status {
@@ -2554,16 +2589,21 @@ ul {
   .email-container.mobile-selecting > .header-actions {
     display: grid;
 
-    grid-template-columns: var(--mail-list-selection-column) 1fr auto;
+    /* Keep the selection controls at their intrinsic width. The remaining
+       space is an empty trailing track instead of a stretched action group. */
+    grid-template-columns: var(--mail-list-selection-column) auto 1fr;
 
-    min-height: 48px;
+    min-height: 44px;
     /* Same left inset as a phone mail row, so the select-all lines up with the
        row checkboxes it controls. */
-    padding: 5px 16px 5px var(--mail-list-checkbox-inset);
+    padding: 4px 8px 4px var(--mail-list-checkbox-inset);
+    column-gap: 4px;
   }
 
   .email-container.mobile-selecting > .header-actions .header-left {
-    gap: 12px;
+    width: max-content;
+    gap: 4px;
+    padding-left: 0 !important;
   }
 
   .email-container.mobile-selecting

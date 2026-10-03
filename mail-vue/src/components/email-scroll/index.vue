@@ -1,5 +1,11 @@
 <template>
-  <div class="email-container" :class="{ 'mobile-selecting': mobileSelecting }">
+  <div
+      class="email-container"
+      :class="{
+        'mobile-selecting': mobileSelecting,
+        'mobile-toolbar-visible': mobileSelecting && selectedCount > 0
+      }"
+  >
     <div v-if="isPhone" class="mobile-inbox-tools">
       <div class="mobile-search-row">
         <label v-if="type === 'email'" class="mobile-search">
@@ -55,7 +61,10 @@
       </div>
     </div>
 
-    <div class="header-actions">
+    <div
+        v-if="!isPhone || (mobileSelecting && selectedCount > 0)"
+        class="header-actions"
+    >
       <el-checkbox
           v-model="checkAll"
           class="mail-check-column"
@@ -187,7 +196,7 @@
                   v-if="type === 'email' && isPhone"
                   class="mobile-sender-avatar"
                   :email="item"
-                  :size="48"
+                  :size="54"
               />
               <div class="title" :class="accountShow ? 'title-column' : 'title-column'">
 
@@ -545,6 +554,7 @@ const dropdownShow = ref(false);
 const rightClickEmail = ref({});
 const MAX_SELECT_COUNT = 95;
 const checkedEmailCount = ref(0);
+const selectedCount = computed(() => emailList.filter(item => item.checked).length);
 const isSelectMax = computed(() => checkedEmailCount.value >= MAX_SELECT_COUNT);
 let timer = null
 const position = ref(
@@ -737,9 +747,7 @@ let swipeBlockClick = false
 
 const swipeActionsReady = computed(() =>
   typeof props.emailDelete === 'function' &&
-  typeof props.emailArchive === 'function' &&
-  typeof props.emailUnarchive === 'function' &&
-  typeof props.emailRestore === 'function'
+  typeof props.emailArchive === 'function'
 )
 
 function swipeEnabled() {
@@ -2512,7 +2520,7 @@ ul {
     color: var(--mobile-primary);
   }
 
-  .email-container.mobile-selecting {
+  .email-container.mobile-toolbar-visible {
     grid-template-rows: auto auto minmax(0, 1fr);
   }
 
@@ -2781,11 +2789,13 @@ ul {
     position: relative;
 
     display: grid;
-    /* Avatar | message body. The old unread-dot gutter is gone; keep a compact
-       safe inset, a 48px avatar, and a 12px text gap. */
-    grid-template-columns: 48px minmax(0, 1fr);
+    /* Checkbox gutter | fixed avatar | content | fixed time. Keeping these
+       tracks stable prevents sender/subject/unread changes from moving the
+       avatar or timestamp horizontally. */
+    /* Checkbox gutter | 54px avatar + 16px text gap | content | time. */
+    grid-template-columns: 20px 70px minmax(0, 1fr) 64px;
 
-    column-gap: 12px;
+    column-gap: 0;
 
     width: 100%;
     /* Keep this identical before, during and after selection. The virtual
@@ -2793,7 +2803,7 @@ ul {
     height: 80px;
     min-height: 80px;
 
-    padding: 10px 20px 10px 16px;
+    padding: 10px 8px;
 
     box-sizing: border-box;
 
@@ -2803,15 +2813,16 @@ ul {
     background: var(--nova-surface);
   }
 
-  :deep(.email-row.email:not(.all-email))::after {
+  :deep(.virtual > div + div > .swipe-shell > .email-row.email:not(.all-email))::before {
     content: '';
 
     position: absolute;
-    /* Message dividers belong to the content area, independently of whether
-       the left checkbox column is present. */
+    /* Only rows after the first one paint a divider. This leaves the filter
+       divider as the only line above the first message and avoids a line after
+       the final message/no-more-data marker. */
     left: 8px;
     right: 8px;
-    bottom: 0;
+    top: 0;
 
     height: 1px;
 
@@ -2834,8 +2845,7 @@ ul {
   .email-container.mobile-selecting
     :deep(.email-row.email:not(.all-email)) {
     /* Selection adds its checkbox track without changing the normal row. */
-    grid-template-columns: var(--mail-list-selection-column) 48px minmax(0, 1fr);
-    column-gap: 0;
+    grid-template-columns: var(--mail-list-selection-column) 70px minmax(0, 1fr) 64px;
   }
 
   .email-container.mobile-selecting
@@ -2849,28 +2859,22 @@ ul {
     padding: 6px 0 0;
   }
 
-  .email-container.mobile-selecting
-    :deep(.email-row.email .mobile-sender-avatar) {
-    grid-column: 2;
-  }
-
-  .email-container.mobile-selecting
-    :deep(.email-row.email > .title) {
-    grid-column: 3;
-  }
-
   /* ---------- Sender avatar ---------- */
 
   .mobile-sender-avatar {
-    grid-column: 1;
+    grid-column: 2;
 
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    flex: 0 0 54px;
+    flex-shrink: 0;
 
-    /* The 12px grid gap supplies the avatar-to-copy breathing room. */
+    /* The 70px track reserves exactly 16px between this 54px container and
+       the message text. */
     justify-self: start;
+    align-self: center;
 
     display: grid;
     place-items: center;
@@ -2890,8 +2894,14 @@ ul {
     text-align: center;
   }
 
-  /* stable SenderAvatar inside the sender line stays available
-     for desktop, but the dedicated 40px avatar owns phone rows */
+  :deep(.mobile-sender-avatar .sender-avatar-image) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* The sender-line avatar stays available for desktop, but the dedicated
+     54px avatar owns phone rows. */
   :deep(.email-row.email .name .sender-avatar) {
     display: none;
   }
@@ -2899,7 +2909,7 @@ ul {
   /* ---------- Message body ---------- */
 
   :deep(.email-row.email > .title) {
-    grid-column: 2;
+    grid-column: 3;
 
     width: 100%;
     min-width: 0;
@@ -2919,10 +2929,7 @@ ul {
     width: 100%;
     min-width: 0;
 
-    display: flex;
-    align-items: center;
-
-    gap: 0;
+    display: block;
 
     /* Sender is the strongest line: largest type, heaviest weight, primary ink. */
     line-height: 20px;
@@ -2945,7 +2952,6 @@ ul {
   }
 
   :deep(.email-row.email .title .email-sender .name) {
-    flex: 1;
     min-width: 0;
 
     display: block;
@@ -2959,19 +2965,40 @@ ul {
     display: none;
   }
 
+  /* The sender-line copy of the time is hidden on phones. The dedicated
+     email-right track below owns the single, aligned timestamp column. */
   :deep(.email-row.email .phone-time) {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    margin-left: auto;
-    min-width: max-content;
-    color: color-mix(in srgb, var(--mobile-secondary) 82%, transparent);
+    display: none;
+  }
+
+  :deep(.email-row.email > .email-right) {
+    grid-column: 4;
+    grid-row: 1;
+    display: flex;
+    align-self: start;
+    justify-content: flex-end;
+    min-width: 0;
+    padding: 0;
+    text-align: right;
+  }
+
+  :deep(.email-row.email > .email-right .email-time-meta) {
+    width: auto;
+    min-width: 0;
+  }
+
+  :deep(.email-row.email > .email-right .email-time) {
+    padding-right: 0;
+    color: var(--mobile-tertiary);
     font-size: 13px;
     font-weight: 400;
     line-height: 20px;
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
+  }
+
+  :deep(.email-row.email.is-unread > .email-right .email-time) {
+    color: var(--el-color-primary);
+    font-weight: 600;
   }
 
   :deep(.email-row.email .email-text) {
@@ -3161,6 +3188,9 @@ ul {
     gap: 2px;
 
     width: 96px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
 
     font-size: 12px;
     font-weight: 600;
@@ -3169,10 +3199,12 @@ ul {
   /* Archive (revealed by dragging right) and Delete (dragging left) use the
      same currentColor outline icons as the Sidebar navigation system. */
   :deep(.swipe-action-archive) {
+    left: 0;
     color: var(--el-color-primary);
   }
 
   :deep(.swipe-action-delete) {
+    right: 0;
     color: var(--el-color-danger);
   }
 

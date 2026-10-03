@@ -12,6 +12,10 @@ KEEP=(
   "LICENSE"
   ".gitignore"
   "doc"
+  "mail-vue/public/icons/"
+  "mail-vue/src/icons/svg/brand-app-dark.svg"
+  "mail-vue/src/icons/svg/brand-app-light.svg"
+  "mail-vue/src/icons/svg/brand-mark.svg"
 )
 
 git remote get-url "$REMOTE" >/dev/null 2>&1 || git remote add "$REMOTE" https://github.com/beihaime/nova-mail.git

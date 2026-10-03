@@ -88,7 +88,7 @@
               v-for="option in themeOptions"
               :key="option.value"
               type="button"
-              class="theme-option"
+              class="theme-option nova-segmented-button"
               :class="{ active: uiStore.themeMode === option.value }"
               :aria-checked="uiStore.themeMode === option.value"
               role="radio"
@@ -282,8 +282,22 @@ const activePaletteLabel = computed(() =>
 const themePresetOptions = computed(() => {
   const labels = {
     'nova-default': t('themePresetDefault'),
-    'soft-light': t('themePresetSoftLight'),
-    midnight: t('themePresetMidnight'),
+    terracotta: t('themePresetTerracotta'),
+    graphite: t('themePresetGraphite'),
+    forest: t('themePresetForest'),
+    lavender: t('themePresetLavender'),
+    matcha: t('themePresetMatcha'),
+    sakura: t('themePresetSakura'),
+    arctic: t('themePresetArctic'),
+    mocha: t('themePresetMocha'),
+    amber: t('themePresetAmber'),
+    aurora: t('themePresetAurora'),
+    cobalt: t('themePresetCobalt'),
+    orchid: t('themePresetOrchid'),
+    crimson: t('themePresetCrimson'),
+    pine: t('themePresetPine'),
+    lunar: t('themePresetLunar'),
+    cyber: t('themePresetCyber'),
     custom: t('themePresetCustom'),
   }
   return [...availablePresets(activePaletteMode.value), 'custom'].map((value) => ({ value, label: labels[value] }))

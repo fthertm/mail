@@ -9,74 +9,74 @@
          <span>{{ $t('compose') }}</span>
       </button>
       <el-menu class="nova-sidebar-nav" :collapse="false">
-        <el-menu-item @click="router.push({name: 'email'})" index="email"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'email'})" index="email"
                       :class="route.meta.name === 'email' ? 'choose-item' : ''">
-          <AppIcon name="inbox" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-inbox" :size="18" inline /></span>
           <span class="menu-name">{{$t('inbox')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'send'})" index="send" v-perm="'email:send'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'send'})" index="send" v-perm="'email:send'"
                       :class="route.meta.name === 'send' ? 'choose-item' : ''">
-          <AppIcon name="sent-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-sent" :size="18" inline /></span>
           <span class="menu-name">{{$t('sent')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'draft'})" index="draft" v-perm="'email:send'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'draft'})" index="draft" v-perm="'email:send'"
                       :class="route.meta.name === 'draft' ? 'choose-item' : ''">
-          <AppIcon name="drafts-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-drafts" :size="18" inline /></span>
           <span class="menu-name">{{$t('drafts')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'star'})" index="star"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'star'})" index="star"
                       :class="route.meta.name === 'star' ? 'choose-item' : ''">
-          <AppIcon name="starred-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-starred" :size="18" inline /></span>
           <span class="menu-name">{{$t('starred')}}</span>
         </el-menu-item>
         <!-- Only users who may archive (the swipe action reuses `email:delete`)
              can ever have anything in here. -->
-        <el-menu-item @click="router.push({name: 'archive'})" index="archive" v-perm="'email:delete'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'archive'})" index="archive" v-perm="'email:delete'"
                       :class="route.meta.name === 'archive' ? 'choose-item' : ''">
-          <AppIcon name="archive-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-archive" :size="18" inline /></span>
           <span class="menu-name">{{$t('archive')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'trash'})" index="trash" v-perm="'email:delete'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'trash'})" index="trash" v-perm="'email:delete'"
                       :class="route.meta.name === 'trash' ? 'choose-item' : ''">
-          <AppIcon name="trash-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-trash" :size="18" inline /></span>
           <span class="menu-name">{{$t('trash')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'setting'})" index="setting"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'setting'})" index="setting"
                       :class="route.meta.name === 'setting' ? 'choose-item' : ''">
-          <AppIcon name="settings-top" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-settings" :size="18" inline /></span>
           <span class="menu-name">{{$t('settings')}}</span>
         </el-menu-item>
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
-        <el-menu-item @click="router.push({name: 'analysis'})" index="analysis" v-perm="'analysis:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'analysis'})" index="analysis" v-perm="'analysis:query'"
                       :class="route.meta.name === 'analysis' ? 'choose-item' : ''">
-          <AppIcon name="history" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-analytics" :size="18" inline /></span>
           <span class="menu-name">{{$t('analytics')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'user'})" index="setting" v-perm="'user:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'user'})" index="setting" v-perm="'user:query'"
                       :class="route.meta.name === 'user' ? 'choose-item' : ''">
-          <AppIcon name="users" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-users" :size="18" inline /></span>
           <span class="menu-name">{{$t('allUsers')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'all-email'})" index="all-email" v-perm="'all-email:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'all-email'})" index="all-email" v-perm="'all-email:query'"
                       :class="route.meta.name === 'all-email' ? 'choose-item' : ''">
-          <AppIcon name="mail-unread" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-mail" :size="18" inline /></span>
           <span class="menu-name">{{$t('allMail')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'role'})" index="setting" v-perm="'role:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'role'})" index="setting" v-perm="'role:query'"
                       :class="route.meta.name === 'role' ? 'choose-item' : ''">
-          <AppIcon name="lock" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-role" :size="18" inline /></span>
           <span class="menu-name">{{$t('permissions')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'reg-key'})" index="reg-key" v-perm="'reg-key:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'reg-key'})" index="reg-key" v-perm="'reg-key:query'"
                       :class="route.meta.name === 'reg-key' ? 'choose-item' : ''">
-          <AppIcon name="label-nav" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-invite" :size="18" inline /></span>
           <span class="menu-name">{{$t('inviteCode')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'sys-setting'})" index="sys-setting" v-perm="'setting:query'"
+        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'sys-setting'})" index="sys-setting" v-perm="'setting:query'"
                       :class="route.meta.name === 'sys-setting' ? 'choose-item' : ''">
-          <AppIcon name="settings-top" :size="19" />
+          <span class="nav-icon"><AppIcon name="nova-sidebar-system-settings" :size="18" inline /></span>
           <span class="menu-name">{{$t('SystemSettings')}}</span>
         </el-menu-item>
       </el-menu>
@@ -84,7 +84,7 @@
   </el-scrollbar>
   <footer class="aside-footer">
     <div class="send-usage">
-      <AppIcon name="send-action" :size="17" />
+      <AppIcon name="nova-sidebar-sent" :size="17" inline />
 
       <div class="send-usage-body">
         <div class="send-usage-head">
@@ -199,8 +199,8 @@ const openCompose = () => uiStore.writerRef?.open()
 <style lang="scss" scoped>
 
 .compose {
-  margin: 6px 14px 4px;
-  width: calc(100% - 28px);
+  margin: 6px 10px 4px;
+  width: calc(100% - 20px);
   height: 42px;
 
 }
@@ -256,23 +256,33 @@ const openCompose = () => uiStore.writerRef?.open()
 
 .manage-title {
   margin-top: 8px;
-  padding-left: 24px;
+  padding: 0 22px;
   color: var(--secondary-text-color);
   font-size: 12px;
+  line-height: 28px;
 }
 
 :deep(.nova-sidebar-nav .el-menu-item) {
   margin: 1px 10px !important;
   border-radius: 9px;
   height: 38px;
-  padding: 9px 12px !important;
-  color: var(--el-text-color-regular);
+  padding: 0 12px !important;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  line-height: 1;
+  color: var(--el-text-color-primary);
   transition: background-color var(--nova-motion-fast) var(--nova-motion-ease), color var(--nova-motion-fast) var(--nova-motion-ease), box-shadow var(--nova-motion-fast) var(--nova-motion-ease);
 }
 
 :deep(.nova-sidebar-nav .choose-item) {
-  color: var(--el-text-color-primary);
+  color: var(--el-color-primary);
   font-weight: 650;
+  background: var(--nova-selected) !important;
+}
+
+:deep(.nova-sidebar-nav .el-menu-item.choose-item:hover) {
   background: var(--nova-selected) !important;
 }
 
@@ -287,7 +297,26 @@ const openCompose = () => uiStore.writerRef?.open()
 
 .menu-name {
   user-select: none;
-  margin-left: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+}
+
+.nav-icon :deep(.app-icon) {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 auto;
 }
 
 
@@ -301,16 +330,6 @@ const openCompose = () => uiStore.writerRef?.open()
 :deep(.el-menu-item img) { width: 19px; height: 19px; opacity: .78; }
 :deep(.choose-item img) { opacity: 1; }
 
-/* Most navigation assets are embedded monochrome PNGs inside their SVG files.
- * Keep the active brand/blue icon untouched, while lifting inactive icons only
- * in dark mode so they remain readable without changing the light theme. */
-:global(.dark .el-menu-item:not(.choose-item) .app-icon) {
-  filter: var(--nova-ui-icon-filter);
-  opacity: 1;
-}
-:global(.dark .el-menu-item:not(.choose-item):hover .app-icon) {
-  filter: var(--nova-ui-icon-filter-hover);
-}
 :global(.dark .send-usage > .app-icon) {
   filter: none !important;
   opacity: .9;
@@ -384,6 +403,7 @@ const openCompose = () => uiStore.writerRef?.open()
 .send-usage > .app-icon {
   flex: 0 0 auto;
   margin-top: 1px;
+  color: var(--el-color-primary);
   opacity: .9;
 }
 

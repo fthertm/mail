@@ -1,19 +1,19 @@
 <template>
-  <div class="box mail-reader">
+  <div ref="readerRef" class="box mail-reader" data-nova-mail-reader>
     <div class="header-actions">
-      <el-tooltip effect="dark" :content="$t('back')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('back')" @click="handleBack"><Icon icon="solar:arrow-left-linear" width="20" height="20" /></button></el-tooltip>
-      <el-tooltip v-if="emailStore.contentData.delType === 'trash'" v-perm="'email:delete'" effect="dark" :content="$t('restoreFromTrash')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('restoreFromTrash')" @click="restoreTrash"><Icon icon="solar:restart-linear" width="20" height="20" /></button></el-tooltip>
-      <el-tooltip v-perm="'email:delete'" effect="dark" :content="emailStore.contentData.delType === 'trash' ? $t('deleteForever') : $t('delete')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="emailStore.contentData.delType === 'trash' ? $t('deleteForever') : $t('delete')" @click="handleDelete"><Icon icon="solar:trash-bin-trash-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip effect="dark" :content="$t('back')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('back')" @click="handleBack"><Icon icon="solar:arrow-left-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.delType === 'trash'" v-perm="'email:delete'" effect="dark" :content="$t('restoreFromTrash')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('restoreFromTrash')" @click="restoreTrash"><Icon icon="solar:restart-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip v-perm="'email:delete'" effect="dark" :content="emailStore.contentData.delType === 'trash' ? $t('deleteForever') : $t('delete')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button nova-danger-button toolbar-action" type="button" :aria-label="emailStore.contentData.delType === 'trash' ? $t('deleteForever') : $t('delete')" @click="handleDelete"><Icon icon="solar:trash-bin-trash-linear" width="20" height="20" /></button></el-tooltip>
       <el-tooltip v-if="emailStore.contentData.showStar" effect="dark" :content="email.isStar ? $t('unstar') : $t('star')" :show-after="2000">
-        <button class="nova-icon-button toolbar-action toolbar-star" type="button" :aria-label="email.isStar ? $t('unstar') : $t('star')" @click="changeStar(email)">
+        <button class="nova-icon-button nova-toolbar-button toolbar-action toolbar-star" type="button" :aria-label="email.isStar ? $t('unstar') : $t('star')" @click="changeStar(email)">
           <Icon v-if="email.isStar" class="nova-star-icon is-active" icon="solar:star-bold" width="18" height="18" />
           <Icon v-else class="nova-star-icon" icon="solar:star-linear" width="18" height="18" />
         </button>
       </el-tooltip>
-      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('reply')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('reply')" @click="openReply"><Icon icon="solar:reply-linear" width="20" height="20" /></button></el-tooltip>
-      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('replyAll')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('replyAll')" @click="openReplyAll"><Icon icon="mdi:reply-all-outline" width="20" height="20" /></button></el-tooltip>
-      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('forward')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('forward')" @click="openForward"><Icon icon="solar:forward-2-linear" width="20" height="20" /></button></el-tooltip>
-      <el-tooltip effect="dark" :content="$t('print')" :show-after="2000"><button class="nova-icon-button toolbar-action" type="button" :aria-label="$t('print')" @click="printEmail"><Icon icon="solar:printer-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('reply')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('reply')" @click="openReply"><Icon icon="solar:reply-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('replyAll')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('replyAll')" @click="openReplyAll"><Icon icon="mdi:reply-all-outline" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip v-if="emailStore.contentData.showReply" v-perm="'email:send'" effect="dark" :content="$t('forward')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('forward')" @click="openForward"><Icon icon="solar:forward-2-linear" width="20" height="20" /></button></el-tooltip>
+      <el-tooltip effect="dark" :content="$t('print')" :show-after="2000"><button class="nova-icon-button nova-toolbar-button toolbar-action" type="button" :aria-label="$t('print')" @click="printEmail"><Icon icon="solar:printer-linear" width="20" height="20" /></button></el-tooltip>
     </div>
     <div></div>
     <el-scrollbar ref="scrollRef" class="scrollbar">
@@ -52,10 +52,12 @@
 
                 <!-- Collapsed card: compact recipient line. The expanded card
                      shows the full metadata panel instead (From/To), so this is
-                     hidden there to avoid repeating the same information. -->
+                     hidden there to avoid repeating the same information.
+                     Phones keep the line inert (see `onRecipientLineClick`). -->
                 <div
                     v-if="!isMessageExpanded(message) && recipientLabelFor(message)"
                     class="message-recipient-preview"
+                    @click="onRecipientLineClick"
                 >
                   {{ $t('to') }} {{ recipientLabelFor(message) }}
                 </div>
@@ -63,10 +65,17 @@
                 <!-- Receiver line + header metadata only exist on the expanded
                      card: a collapsed card must not leak header metadata. -->
                 <template v-if="isMessageExpanded(message)">
-                  <button class="recipient-toggle" type="button" @click.stop="toggleMessageMetadata(message)">
+                  <!-- Phones: the same "To …" line as plain, inert text. The
+                       From/To panel below is a desktop affordance, so it is
+                       neither mounted nor toggled here (same 767px breakpoint
+                       the mobile stylesheet uses). -->
+                  <div v-if="isMobileReader" class="message-recipient-preview" @click.stop>
+                    {{ $t('to') }} {{ recipientLabelFor(message) }}
+                  </div>
+                  <button v-else class="recipient-toggle" type="button" @click.stop="toggleMessageMetadata(message)">
                     {{ $t('to') }} {{ recipientLabelFor(message) }} <span aria-hidden="true">⌄</span>
                   </button>
-                  <div v-if="isMetadataOpen(message)" class="message-details" @click.stop>
+                  <div v-if="!isMobileReader && isMetadataOpen(message)" class="message-details" @click.stop>
                     <div class="detail-row">
                       <span class="detail-label">{{ $t('from') }}</span>
                       <span class="detail-value"><span class="detail-name">{{ message.from.name || '—' }}</span> <span class="detail-email">&lt;{{ message.from.email || '—' }}&gt;</span></span>
@@ -146,6 +155,7 @@
                     :text="message.text || ''"
                     :allow-images="isRemoteImagesAllowed(message)"
                     :theme="uiStore.dark ? 'dark' : 'light'"
+                    :background="readerBodyBackground"
                     :title="message.subject || ''"
                     @blocked="count => setBlockedImageCount(message, count)"
                 />
@@ -256,6 +266,8 @@ import { enhancePlainTextCodeBlocks } from '@/utils/code-blocks.js'
 import {looksLikeHtmlDocument} from '@/utils/mail-body-hint.js'
 import {attachmentRisk} from '@/utils/attachment-risk.js'
 import {alertNewMail} from '@/utils/new-mail-alert.js'
+import {DEFAULT_PALETTES} from '@/utils/theme-palette.js'
+import {playReaderOpen, playReaderClose, readerUnmounted} from '@/utils/mail-transition.js'
 
 const uiStore = useUiStore();
 const settingStore = useSettingStore();
@@ -263,6 +275,13 @@ const accountStore = useAccountStore();
 const emailStore = useEmailStore();
 const router = useRouter()
 const route = useRoute()
+// The HTML renderer lives in an isolated iframe, so it cannot inherit the
+// host document's CSS variables. Pass the resolved palette colour explicitly
+// to keep its document root aligned with the reader background.
+const readerBodyBackground = computed(() => {
+  const mode = uiStore.dark ? 'dark' : 'light'
+  return uiStore[`${mode}Palette`]?.background || DEFAULT_PALETTES[mode].background
+})
 const email = computed(() => emailStore.contentData.email || {
   emailId: 0,
   attList: [],
@@ -276,6 +295,9 @@ const srcList = reactive([])
 const pdfPreview = reactive({ show: false, url: '', name: '' })
 let pdfUrl = null
 const scrollRef = ref(null)
+// The reading pane itself: the shared-container transition measures it as the
+// rect an opened preview grows into (and shrinks back out of).
+const readerRef = ref(null)
 
 // The mobile action bar is teleported to <body> so no transformed ancestor
 // (`.main-view` keeps an identity transform from its enter animation) can turn
@@ -365,6 +387,16 @@ function isMetadataOpen(message) {
 
 function toggleMessageMetadata(message) {
   metadataMessages[message.id] = !metadataMessages[message.id]
+}
+
+/**
+ * Phones show the "To …" line as plain text: tapping it must not expand or
+ * collapse anything — neither the From/To panel (a desktop affordance) nor the
+ * message card it sits in. On desktop the event is left alone so the header's
+ * own expand/collapse handler still receives it.
+ */
+function onRecipientLineClick(event) {
+  if (isMobileReader.value) event.stopPropagation()
 }
 
 function recipientLabelFor(message) {
@@ -1162,6 +1194,10 @@ onMounted(() => {
   openFromNotificationLink()
   tryMarkRead()
   startRealtime()
+  // If a list preview armed the shared-container transition, this pane grows
+  // out of it now; otherwise the call is a no-op and the pane animates in as
+  // usual. Measured a frame later so the surrounding layout has settled.
+  nextTick(() => playReaderOpen(readerRef.value))
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('keydown', handleKeyDown);
   if (mobileReaderQuery.addEventListener) {
@@ -1172,6 +1208,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // Transition teardown first: an unrelated throw further down must not leave
+  // the parked preview layer or the close guard behind.
+  readerUnmounted()
+  stopCloseGuard()
   closePreview()
   closePdfPreview()
   stopRealtime()
@@ -1184,6 +1224,23 @@ onUnmounted(() => {
   } else {
     mobileReaderQuery.removeListener(handleMobileReaderChange)
   }
+})
+
+/**
+ * Closing the reader runs the reverse transition first: the pane shrinks back
+ * onto the preview it grew out of, and only once it has landed does the route
+ * change — which is what actually unmounts the detail DOM.
+ *
+ * A router-level guard, not `onBeforeRouteLeave`: the desktop layout renders
+ * this pane beside the `<router-view>` instead of inside it, so a
+ * route-record guard would never be registered there. Filtering on `from` keeps
+ * it scoped to this view, and removing it on unmount keeps it from outliving
+ * the reader. It covers every way out (back button, Escape, browser back).
+ */
+const stopCloseGuard = router.beforeEach(async (to, from) => {
+  if (from.name !== 'content' || to.name === 'content') return true
+  await playReaderClose(readerRef.value)
+  return true
 })
 
 function handleKeyDown(event) {
@@ -1328,6 +1385,22 @@ async function previewAttachment(att) {
     console.error('Nova Mail: attachment preview failed', error)
     ElMessage.error(t('reqFailErrorMsg'))
   }
+}
+
+/**
+ * Close the in-place image viewer and release the object URL it was reading.
+ *
+ * Restored: the body of this function was dropped by accident in the
+ * attachment-preview refactor, which left every reader unmount throwing
+ * (`closePreview is not defined`) in dev — where a lifecycle error is rethrown
+ * and aborts the surrounding patch, so the list came back empty after closing a
+ * message. The transition hand-off also depends on the unmount finishing.
+ */
+function closePreview() {
+  showPreview.value = false
+  srcList.length = 0
+  if (previewUrl) URL.revokeObjectURL(previewUrl)
+  previewUrl = null
 }
 
 function openPdfPreview(url, filename) {
@@ -1862,6 +1935,13 @@ function restoreTrash() {
   border-color: var(--nova-divider);
 }
 
+/* Expanding a message changes its content visibility, not its surface colour.
+   The body owns the page-background token below, so an active message can
+   never introduce a second dark/light rectangle behind its content. */
+.thread-message.is-expanded {
+  background: var(--nova-surface-muted);
+}
+
 .thread-message {
   /* Content-driven height, and never an outer gap — collapsed or expanded. */
   height: auto;
@@ -1953,6 +2033,7 @@ function restoreTrash() {
  * so a skipped animation can only skip the fade, not the content. */
 .message-body {
   padding: 0 16px 18px;
+  background: var(--nova-background);
   animation: nova-message-open var(--nova-motion-base) var(--nova-motion-ease) forwards;
 }
 
@@ -1972,7 +2053,6 @@ function restoreTrash() {
     opacity: 0;
     transform: translateY(-8px);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--el-color-primary) 45%, transparent);
-    background: color-mix(in srgb, var(--el-color-primary) 10%, var(--el-bg-color));
   }
   18% {
     opacity: 1;
@@ -1980,11 +2060,9 @@ function restoreTrash() {
   }
   70% {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
-    background: color-mix(in srgb, var(--el-color-primary) 5%, var(--el-bg-color));
   }
   100% {
     box-shadow: none;
-    background: var(--el-bg-color);
   }
 }
 
@@ -2038,21 +2116,17 @@ function restoreTrash() {
   margin-bottom: 0;
 }
 
+.message-body .htm-scrollbar,
+.message-body .email-text,
+.message-body :deep(.mail-frame),
+.message-body :deep(.mail-frame__iframe) {
+  background: var(--nova-background);
+}
+
 .htm-scrollbar { max-width: 1100px; overflow-x: auto; }
 .email-text { max-width: 100%; overflow-wrap: anywhere; font-family: var(--nova-font-reading); font-size: 15px; font-weight: 400; line-height: 1.62; color: var(--nova-text-primary); }
 .reader-bottom-actions { display: flex; gap: 10px; max-width: 1100px; padding: 28px 0 18px; }
 .reader-bottom-actions button { gap: 7px; }
-
-.shadow-html::after  {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--message-block-color); /* 半透明黑色蒙层 */
-  pointer-events: none; /* 不影响点击 */
-}
 
 /* Remote content is held back until the reader asks for it, so a tracking pixel
    never fires just because a message was opened. */
@@ -2456,38 +2530,32 @@ function restoreTrash() {
     max-width: 100%;
     overflow: hidden;
     /* Still ONE compact line: a phone header must not grow two lines for a
-       long address. The metadata panel below shows the complete address. */
+       long address (there is no metadata panel to fall back on at this width). */
     white-space: nowrap;
     text-overflow: ellipsis;
     font-size: 12px;
   }
 
-  .message-head .recipient-toggle {
-    grid-column: 2 / -1;
-    grid-row: 3;
-    margin-top: 4px;
-    max-width: 100%;
-  }
-
-  /* Row 3 while collapsed. The expanded card swaps in the recipient-toggle /
-     metadata panel, which occupy the same grid cell. */
+  /* Row 3: the plain "To …" line, on a collapsed and an expanded card alike.
+     Phones render neither the toggle nor the From/To panel, so this line always
+     owns the cell and can never leave an empty row behind. `cursor: default`
+     opts out of the pointer the tappable header inherits: the line is inert. */
   .message-head .message-recipient-preview {
     grid-column: 2 / -1;
     grid-row: 3;
     margin-top: 4px;
     font-size: 12px;
+    cursor: default;
   }
 
+  /* Desktop-only panel. The placement rules stay for the print path (an A4 page
+     is narrower than this breakpoint, and `@media print` re-shows the panel with
+     `display: grid !important`); on screen it must take up no room at all, so a
+     live resize down to a phone cannot leave an empty row behind. */
   .message-head .message-details {
     grid-column: 2 / -1;
     grid-row: 3;
     margin-top: 8px;
-  }
-
-  /* Once the details box is open it owns From/To, so the header's duplicate
-     "To …" line is hidden. Class-only: the rule lives in this media query, so
-     desktop markup/behaviour is untouched. */
-  .message-head.is-details-open .recipient-toggle {
     display: none;
   }
 

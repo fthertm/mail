@@ -25,7 +25,7 @@
              width instead of splitting it with an action group. -->
         <div class="mobile-filter-actions">
           <button
-              class="mobile-tool-button mobile-sort"
+              class="mobile-tool-button nova-mobile-icon-button mobile-sort"
               :aria-label="t('sortByTime')"
               @click="mobileSortClick"
           >
@@ -33,7 +33,7 @@
           </button>
 
           <button
-              class="mobile-tool-button"
+              class="mobile-tool-button nova-mobile-icon-button"
               :aria-label="mobileSelecting ? t('cancel') : t('multiSelect')"
               @click="toggleMobileSelection"
           >
@@ -51,6 +51,7 @@
           <button
               v-for="filter in mobileFilters"
               :key="filter.key"
+              class="nova-segmented-button"
               :class="{ active: mobileFilter === filter.key }"
               @click="selectMobileFilter(filter.key)"
           >
@@ -63,6 +64,7 @@
     <div class="header-actions">
       <el-checkbox
           v-model="checkAll"
+          class="mail-check-column"
           :indeterminate="isIndeterminate"
           :disabled="!emailList.length || loading"
           @change="handleCheckAllChange"
@@ -71,13 +73,9 @@
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
         <slot name="first"></slot>
-        <AppIcon class="icon reload" name="refresh" :size="18" @click="refresh"/>
-        <AppIcon v-perm="'email:delete'" class="icon delete" name="delete-outline" :size="18"
+        <AppIcon v-perm="'email:delete'" class="icon delete" name="nova-sidebar-trash" :size="18" inline
               v-if="getSelectedMailsIds().length > 0"
               @click="handleDelete"/>
-        <AppIcon v-perm="'email:delete'" class="icon delete" name="mail-unread" :size="20"
-              v-if="getSelectedMailsIds().length > 0 && showUnread"
-              @click="handleRead"/>
       </div>
 
       <div class="header-right">
@@ -122,11 +120,11 @@
                    only built where the gesture is actually available. -->
               <div v-if="props.type === 'email' && swipeActionsReady" class="swipe-actions" aria-hidden="true">
                 <div class="swipe-action swipe-action-archive">
-                  <AppIcon name="archive-nav" :size="22"/>
+                  <AppIcon name="nova-sidebar-archive" :size="22" inline />
                   <span>{{ t('archive') }}</span>
                 </div>
                 <div class="swipe-action swipe-action-delete">
-                  <AppIcon name="trash-nav" :size="22"/>
+                  <AppIcon name="nova-sidebar-trash" :size="22" inline />
                   <span>{{ t('delete') }}</span>
                 </div>
               </div>
@@ -135,7 +133,8 @@
                     'is-unread': item.unread === EmailUnreadEnum.UNREAD && showUnread
                   }]"
                    :data-checked="item.checked"
-                   @click="jumpDetails(item)"
+                   :data-email-id="item.emailId"
+                   @click="jumpDetails(item, $event)"
                    @click.capture="onRowClickCapture"
                    @contextmenu="handleContextmenu($event, item)"
                    @pointerdown="onRowPointerDown($event, item)"
@@ -144,7 +143,7 @@
                    @pointerleave="onRowPointerLeave"
                    @pointercancel="onRowPointerCancel"
               >
-              <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
+              <el-checkbox :class="['mail-check-column', props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox']"
                            v-model="item.checked"
                            :disabled="!item.checked && isSelectMax"
                            @click.stop></el-checkbox>
@@ -366,7 +365,7 @@
           <el-dropdown-item @click="rightDelete(rightClickEmail.emailId)">
             <template #default>
               <div class="right-dropdown-item">
-                <Icon icon="uiw:delete" width="16" height="20" style="margin-left: 1px;margin-right: 3px" />
+                <AppIcon name="nova-sidebar-trash" :size="18" inline />
                 <span>{{t('delete')}}</span>
               </div>
             </template>
@@ -405,6 +404,7 @@ import {
   swipeCommitDistance,
 } from '@/utils/swipe-actions.js'
 import { showUndoSnackbar } from '@/utils/undo-snackbar.js'
+import { captureListPreview } from '@/utils/mail-transition.js'
 
 const props = defineProps({
   getEmailList: Function,
@@ -475,7 +475,6 @@ const props = defineProps({
 
 const emit = defineEmits([
   'jump',
-  'refresh-before',
   'delete-draft',
   'right-search',
   'mobile-sort'
@@ -1222,12 +1221,6 @@ function changeAccountShow() {
   uiStore.accountShow = !uiStore.accountShow;
 }
 
-const handleRead = () => {
-  const emailIds = getSelectedMailsIds();
-  props.emailRead(emailIds);
-  localRead(emailIds);
-}
-
 function emailRead(emailId) {
   props.emailRead([emailId])
   localRead([emailId]);
@@ -1450,7 +1443,7 @@ function updateCheckStatus() {
   isIndeterminate.value = checkedCount > 0 && !checkAll.value;
 }
 
-function jumpDetails(email) {
+function jumpDetails(email, event) {
   // A horizontal drag ends with a click too; it must never open the message.
   if (swipeBlockClick) {
     swipeBlockClick = false
@@ -1478,6 +1471,12 @@ function jumpDetails(email) {
       return
     }
   }
+
+  // Snapshot the row before the list is replaced by the reader, so the opened
+  // message can grow out of the preview that was clicked (and shrink back into
+  // it on the way out).
+  captureListPreview(event?.currentTarget)
+
   emit('jump', email)
 }
 
@@ -1572,14 +1571,6 @@ function handleList(list) {
   })
 }
 
-function refresh() {
-  emit('refresh-before')
-  if (props.skeleton) {
-    scrollbarRef.value.setScrollTop(0)
-  }
-  refreshList()
-}
-
 function refreshList() {
   checkAll.value = false;
   isIndeterminate.value = false;
@@ -1593,7 +1584,31 @@ function loadData() {
 </script>
 <style lang="scss" scoped>
 
+/* The one checkbox column, shared by the header's select-all, every message row
+   and the skeleton rows (a child component, hence `:deep`). Same fixed width, no
+   padding, no margin, content centred: that is what puts every checkbox on one
+   vertical axis. No other rule may set a width, padding or margin here. */
+:deep(.mail-check-column) {
+  display: flex;
+  flex: 0 0 auto;
+  width: var(--mail-list-selection-column);
+  min-width: var(--mail-list-selection-column);
+  max-width: var(--mail-list-selection-column);
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  justify-content: center;
+  align-items: center;
+}
+
 .email-container {
+  --mail-list-selection-column: 24px;
+  --mail-list-column-gap: 8px;
+  --mail-list-horizontal-padding: 14px;
+  /* Where the checkbox column starts, from the container's edge. Header and
+     rows must agree on this number or their checkboxes cannot share an axis;
+     it mirrors the inset the rows themselves are drawn with. */
+  --mail-list-checkbox-inset: var(--mail-list-horizontal-padding);
   display: grid;
   grid-template-rows: auto 1fr;
   grid-template-columns: minmax(0, 1fr);
@@ -1628,8 +1643,13 @@ function loadData() {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 15px 0 0 0;
+    min-height: 34px;
+    padding: 8px 0 0;
     color: var(--secondary-text-color);
+    font-size: 11px;
+    line-height: 1.2;
+    opacity: .58;
+    pointer-events: none;
   }
 
   .follow-loading {
@@ -1727,20 +1747,11 @@ function loadData() {
     }
   }
 
-  .checkbox {
-    display: flex;
-    padding-left: 2px;
-    padding-right: 12px;
-    justify-content: center;
-  }
-
+  /* Width, padding and centring come from the shared `.mail-check-column`. The
+     all-mail rows are the one variant with a different height, so they keep
+     their own vertical placement on very wide screens. */
   .all-email-checkbox {
-    display: flex;
-    padding-left: 15px;
-    padding-right: 20px;
-    justify-content: center;
     @media (min-width: 1367px) {
-      justify-content: start;
       height: 100%;
       align-self: start;
       padding-bottom: 30px;
@@ -1979,9 +1990,9 @@ function loadData() {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  min-height: 48px;
+  height: 48px;
   gap: 12px;
-  padding: 7px 14px;
+  padding: 0 14px;
   box-shadow: inset 0 -1px 0 var(--nova-divider);
 
   .header-left {
@@ -1990,7 +2001,7 @@ function loadData() {
     align-items: center;
     position: relative;
     column-gap: 14px;
-    row-gap: 8px;
+    row-gap: 0;
     padding-left: 2px;
     color: var(--el-text-color-primary);;
   }
@@ -1998,13 +2009,13 @@ function loadData() {
   .header-right {
     display: grid;
     grid-template-columns: auto auto;
-    align-items: start;
+    align-items: center;
     height: 100%;
     color: var(--el-text-color-primary);;
 
     .email-count {
       white-space: nowrap;
-      margin-top: 6px;
+      margin-top: 0;
     }
   }
 
@@ -2068,18 +2079,21 @@ ul {
 /* Compact desktop mail rows: keep the list dense and columns stable while
    preserving the existing virtual-list item height (48px). */
 @media (min-width: 768px) {
-  :deep(.email-row:not(.all-email)) {
-    display: grid;
-    grid-template-columns: 24px var(--nova-icon-button-size) minmax(0, 1fr) 82px;
-    align-items: center;
-    gap: 8px;
-    height: 48px;
-    min-height: 48px;
-    padding: 4px 14px;
+  .header-actions {
+    grid-template-columns: var(--mail-list-selection-column) minmax(0, 1fr) auto;
+    column-gap: var(--mail-list-column-gap);
+    padding-right: var(--mail-list-horizontal-padding);
+    padding-left: var(--mail-list-checkbox-inset);
   }
 
-  :deep(.email-row:not(.all-email) .checkbox) {
-    padding: 0;
+  :deep(.email-row:not(.all-email)) {
+    display: grid;
+    grid-template-columns: var(--mail-list-selection-column) var(--nova-icon-button-size) minmax(0, 1fr) 82px;
+    align-items: center;
+    gap: var(--mail-list-column-gap);
+    height: 48px;
+    min-height: 48px;
+    padding: 4px var(--mail-list-horizontal-padding);
   }
 
   :deep(.email-row:not(.all-email) .pc-star) {
@@ -2154,9 +2168,17 @@ ul {
    column; all message content stays together in the second column so the
    avatar, sender, time, subject and preview cannot drift apart. */
 @media (max-width: 767px) {
+  .email-container {
+    /* Phone rows draw their content with an 8px inset (see `.email-row.email`)
+       and a 20px selection column, so the header uses the same two numbers and
+       both checkboxes stay on one axis. */
+    --mail-list-selection-column: 20px;
+    --mail-list-checkbox-inset: 8px;
+  }
+
   :deep(.email-row:not(.all-email)) {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-columns: var(--mail-list-selection-column) minmax(0, 1fr);
     column-gap: 8px;
     align-items: start;
     height: 83px;
@@ -2165,14 +2187,13 @@ ul {
     box-sizing: border-box;
   }
 
+  /* Horizontal placement, width and centring come from `.mail-check-column`;
+     only the vertical nudge for the phone row lives here. */
   :deep(.email-row:not(.all-email) > .checkbox) {
     grid-column: 1;
     grid-row: 1;
-    width: 18px;
     height: 18px;
     align-self: start;
-    justify-content: flex-start;
-    padding: 0;
     margin-top: 2px;
   }
 
@@ -2533,10 +2554,12 @@ ul {
   .email-container.mobile-selecting > .header-actions {
     display: grid;
 
-    grid-template-columns: 32px 1fr auto;
+    grid-template-columns: var(--mail-list-selection-column) 1fr auto;
 
     min-height: 48px;
-    padding: 5px 16px;
+    /* Same left inset as a phone mail row, so the select-all lines up with the
+       row checkboxes it controls. */
+    padding: 5px 16px 5px var(--mail-list-checkbox-inset);
   }
 
   .email-container.mobile-selecting > .header-actions .header-left {
@@ -2547,9 +2570,6 @@ ul {
     > .header-actions
     .header-left
     > :first-child,
-  .email-container.mobile-selecting
-    > .header-actions
-    .reload,
   .email-container.mobile-selecting
     > .header-actions
     .header-right {
@@ -2620,7 +2640,7 @@ ul {
   .email-container.mobile-selecting
     :deep(.email-row.email) {
     /* The checkbox replaces the unread gutter in the first track. */
-    grid-template-columns: 20px 50px minmax(0, 1fr);
+    grid-template-columns: var(--mail-list-selection-column) 50px minmax(0, 1fr);
   }
 
   .email-container.mobile-selecting
@@ -2629,9 +2649,9 @@ ul {
 
     display: flex;
 
-    width: 20px;
+    /* Vertical nudge only: the column's width, padding and centring are the
+       shared `.mail-check-column` ones the header select-all also uses. */
     padding: 6px 0 0;
-    margin: 0;
   }
 
   .email-container.mobile-selecting
@@ -2956,8 +2976,10 @@ ul {
   /* End-of-list label: give it real air below the last message instead of
      sitting flush against the final row. */
   .noLoading {
-    padding: 20px 0 14px;
-    font-size: 13px;
+    min-height: 34px;
+    padding: 12px 0 8px;
+    font-size: 11px;
+    opacity: .56;
   }
 
   /* ---------- Swipe actions ----------
@@ -3022,10 +3044,8 @@ ul {
     font-weight: 600;
   }
 
-  /* Archive (revealed by dragging right) and Delete (dragging left) are told
-     apart by a tint of the shared accent colours over the muted surface. A
-     saturated fill would fight the monochrome archive/trash SVGs, which are
-     dark glyphs that the theme inverts. */
+  /* Archive (revealed by dragging right) and Delete (dragging left) use the
+     same currentColor outline icons as the Sidebar navigation system. */
   :deep(.swipe-action-archive) {
     color: var(--el-color-primary);
   }

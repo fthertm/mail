@@ -62,6 +62,12 @@ const props = defineProps({
     default: 'light',
     validator: value => ['light', 'dark'].includes(value)
   },
+  // The isolated document cannot resolve the host's CSS variables. This is the
+  // active palette background used for its html/body and renderer root only.
+  background: {
+    type: String,
+    default: ''
+  },
   title: {
     type: String,
     default: ''
@@ -326,6 +332,7 @@ function rebuild() {
     html: props.html,
     allowImages: props.allowImages,
     theme: props.theme === 'dark' ? 'dark' : 'light',
+    background: props.background,
     nonce,
     title: props.title,
     fallbackText: props.text
@@ -355,7 +362,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [props.html, props.allowImages, props.theme],
+  () => [props.html, props.allowImages, props.theme, props.background],
   () => rebuild()
 )
 
@@ -378,15 +385,16 @@ defineExpose({
 .mail-frame {
   width: 100%;
   display: block;
+  background: var(--nova-background);
 }
 
 .mail-frame__iframe {
   width: 100%;
   display: block;
   border: 0;
-  /* The frame is an opaque pane: give it no background of its own so the mail's
-     own colours (and the app's theme behind it) show through. */
-  background: transparent;
+  /* The untrusted document itself stays transparent, while its host always
+     inherits the reader's page background across every theme. */
+  background: var(--nova-background);
   color-scheme: normal;
 }
 

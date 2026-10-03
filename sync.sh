@@ -5,7 +5,6 @@ REMOTE=nova
 BRANCH=main
 KEEP=(
   "mail-worker/wrangler.toml"
-  "mail-vue/index.html"
   ".github"
   "README.md"
   "README.zh-CN.md"

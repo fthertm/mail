@@ -29,6 +29,7 @@ import { MAIL_BODY } from '../lib/mail-body';
 import threadService from './thread-service';
 import senderAvatarService from './sender-avatar-service';
 import pushService from './push-service';
+import { pageSize } from '../utils/pagination';
 
 const MAX_SEARCH_LENGTH = 200;
 
@@ -122,7 +123,7 @@ const emailService = {
 
 		let { emailId, type, accountId, size, timeSort, allReceive, full, keyword, archived, trashed } = params;
 
-		size = Number(size);
+		size = pageSize(size);
 		// Trash contains both received and sent copies.  Normal folders still send
 		// their concrete numeric type; the owner-only Trash view is the one caller
 		// allowed to request all types.
@@ -149,19 +150,12 @@ const emailService = {
 			throw new BizError(t('emptyAccountId'));
 		}
 
-		if (isNaN(size)) {
-			size = 10;
-		}
 
 		if (isNaN(full)) {
 			full = 1;
 		}
 
 		full = full === 1;
-
-		if (size > 50) {
-			size = 50;
-		}
 
 		if (isNaN(allReceive)) {
 			let accountRow = await accountService.selectById(c, accountId);
@@ -498,8 +492,8 @@ const emailService = {
 		const emailIdList = await ownedThreadMessageIds(c, userId, params?.emailIds);
 		if (!emailIdList.length) return { soft: true };
 
-		// Preserve the actual folder state before hiding the message. Attachments,
-		// stars and all delivery metadata intentionally remain untouched.
+		// Preserve the actual folder state before hiding the message. Attachments
+		// and delivery metadata remain untouched; moving to Trash clears stars.
 		await orm(c).update(email).set({
 			trashed: 1,
 			trashedAt: new Date().toISOString(),
@@ -510,6 +504,7 @@ const emailService = {
 				eq(email.trashed, 0),
 				inArray(email.emailId, emailIdList)))
 			.run();
+		await starService.removeByEmailIds(c, emailIdList);
 
 		return { soft: true };
 	},
@@ -529,6 +524,7 @@ const emailService = {
 			trashedAt: new Date().toISOString(),
 			trashArchived: sql`${email.archived}`,
 		}).where(and(eq(email.trashed, 0), inArray(email.emailId, emailIdList))).run();
+		await starService.removeByEmailIds(c, emailIdList);
 		return { soft: true };
 	},
 
@@ -560,6 +556,7 @@ const emailService = {
 				eq(email.trashed, 0),
 				inArray(email.emailId, emailIdList)))
 			.run();
+		if (archived) await starService.removeByEmailIds(c, emailIdList);
 	},
 
 	/**
@@ -584,6 +581,9 @@ const emailService = {
 				eq(email.trashed, 1),
 				inArray(email.emailId, emailIdList)))
 			.run();
+		// Restoring a message never restores its former star state. This also
+		// cleans up records created before archive/trash actions cleared stars.
+		await starService.removeByEmailIds(c, emailIdList);
 	},
 
 	async restore(c, params, userId) { return this.restoreFromTrash(c, params, userId); },
@@ -1423,21 +1423,13 @@ const emailService = {
 
 		let { emailId, size, name, subject, accountEmail, userEmail, type, timeSort, full } = params;
 
-		size = Number(size);
+		size = pageSize(size);
 		emailId = Number(emailId) || 0;
 		timeSort = Number(timeSort);
 		full = Number(full);
 
 		if (type === undefined) {
 			type = 'receive';
-		}
-
-		if (isNaN(size)) {
-			size = 10;
-		}
-
-		if (size > 50) {
-			size = 50;
 		}
 
 		if (isNaN(full)) {
@@ -1665,12 +1657,16 @@ const emailService = {
 		}
 
 		await attService.removeByEmailIds(c, emailIds);
+		await starService.removeByEmailIds(c, emailIds);
 
 		await orm(c).delete(email).where(conditions.length > 1 ? and(...conditions) : conditions[0]).run();
 	},
 
 	async physicsDeleteByAccountId(c, accountId) {
 		await attService.removeByAccountId(c, accountId);
+		const rows = await orm(c).select({ emailId: email.emailId }).from(email)
+			.where(eq(email.accountId, accountId)).all();
+		if (rows.length) await starService.removeByEmailIds(c, rows.map(row => row.emailId));
 		await orm(c).delete(email).where(eq(email.accountId, accountId)).run();
 	},
 

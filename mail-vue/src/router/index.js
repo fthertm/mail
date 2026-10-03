@@ -2,6 +2,7 @@ import {createRouter, createWebHistory} from 'vue-router'
 import NProgress from 'nprogress';
 import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
+import {useUserStore} from "@/store/user.js";
 import {cvtR2Url} from "@/utils/convert.js";
 import {AUTH_NAVIGATION, resolveAuthNavigation} from "@/router/auth-guard.js";
 
@@ -49,14 +50,65 @@ const routes = [
                 }
             },
             {
+                path: '/settings/account',
+                redirect: to => ({
+                    path: to.query.github || to.query.google
+                        ? '/settings/account-security/connected-accounts'
+                        : '/settings/account-security',
+                    query: to.query
+                })
+            },
+            {
+                path: '/settings/account-security',
+                name: 'setting-account-security',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'accountSecurity', menu: true }
+            },
+            {
+                path: '/settings/account-security/profile',
+                name: 'setting-profile',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'profile', menu: true }
+            },
+            {
+                path: '/settings/account-security/addresses',
+                name: 'setting-addresses',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'emailAddresses', menu: true }
+            },
+            {
+                path: '/settings/account-security/connected-accounts',
+                name: 'setting-connected-accounts',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'connectedAccounts', menu: true }
+            },
+            {
+                path: '/settings/account-security/sessions',
+                name: 'setting-sessions',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'deviceSessions', menu: true }
+            },
+            {
+                path: '/settings/account-security/delete-account',
+                name: 'setting-delete-account',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'deleteUser', menu: true }
+            },
+            {
+                path: '/settings/personalization',
+                name: 'setting-personalization',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'personalization', name: 'setting-personalization', menu: true }
+            },
+            {
+                path: '/settings/about',
+                name: 'setting-about',
+                component: () => import('@/views/setting/index.vue'),
+                meta: { title: 'about', name: 'setting-about', menu: true }
+            },
+            {
                 path: '/settings/addresses',
-                name: 'addresses',
-                component: () => import('@/views/addresses/index.vue'),
-                meta: {
-                    title: 'manageAddresses',
-                    name: 'addresses',
-                    menu: true
-                }
+                redirect: '/settings/account-security/addresses'
             },
             {
                 path: '/starred',
@@ -87,6 +139,51 @@ const routes = [
         path: '/login',
         name: 'login',
         component: () => import('@/views/login/index.vue')
+    },
+    {
+        path: '/admin',
+        name: 'admin',
+        component: () => import('@/layout/admin/index.vue'),
+        redirect: '/admin/analytics',
+        meta: { admin: true, menu: false },
+        children: [
+            {
+                path: 'analytics',
+                name: 'admin-analytics',
+                component: () => import('@/views/analysis/index.vue'),
+                meta: { admin: true, title: 'analytics' }
+            },
+            {
+                path: 'users',
+                name: 'admin-users',
+                component: () => import('@/views/user/index.vue'),
+                meta: { admin: true, title: 'allUsers' }
+            },
+            {
+                path: 'mail',
+                name: 'admin-mail',
+                component: () => import('@/views/all-email/index.vue'),
+                meta: { admin: true, title: 'allMail' }
+            },
+            {
+                path: 'roles',
+                name: 'admin-roles',
+                component: () => import('@/views/role/index.vue'),
+                meta: { admin: true, title: 'permissions' }
+            },
+            {
+                path: 'invite-codes',
+                name: 'admin-invite-codes',
+                component: () => import('@/views/reg-key/index.vue'),
+                meta: { admin: true, title: 'inviteCode' }
+            },
+            {
+                path: 'settings',
+                name: 'admin-settings',
+                component: () => import('@/views/sys-setting/index.vue'),
+                meta: { admin: true, title: 'SystemSettings' }
+            }
+        ]
     },
     {
         path: '/test',
@@ -146,6 +243,13 @@ router.beforeEach((to, from, next) => {
 
     if (decision.type === AUTH_NAVIGATION.REDIRECT_AWAY) {
         return next(decision.target)
+    }
+
+    const userStore = useUserStore()
+    const isAdminRoute = to.matched.some(record => record.meta?.admin)
+    const isAdmin = userStore.user?.type === 0
+    if (isAdminRoute && !isAdmin) {
+        return next({name: 'email'})
     }
 
     next()

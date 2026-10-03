@@ -73,8 +73,6 @@
               <div v-else class="address-loading">{{ $t('loading') }}</div>
             </div>
             <div class="account-dropdown-actions">
-              <button v-if="hasPerm('account:query')" class="nova-ghost-button" @click="openManageAddresses"><AppIcon name="user" :size="17" />{{ $t('manageAddresses') }}</button>
-              <button class="nova-ghost-button" @click="openSettings"><AppIcon name="settings-top" :size="17" />{{ $t('settings') }}</button>
               <button class="sign-out nova-ghost-button nova-danger-button" :disabled="logoutLoading" @click="clickLogout">{{ $t('logOut') }}</button>
             </div>
           </div>
@@ -134,8 +132,6 @@
             <div v-else class="mobile-profile-address-loading">{{ $t('loading') }}</div>
           </div>
           <footer class="mobile-profile-sheet-actions">
-            <button v-if="hasPerm('account:query')" class="nova-ghost-button" @click="openManageAddresses"><AppIcon name="user" :size="17" />{{ $t('manageAddresses') }}</button>
-            <button class="nova-ghost-button" @click="openSettings"><AppIcon name="settings-top" :size="17" />{{ $t('settings') }}</button>
             <button class="sign-out nova-ghost-button nova-danger-button" :disabled="logoutLoading" @click="clickLogout">{{ $t('logOut') }}</button>
           </footer>
         </section>
@@ -161,6 +157,7 @@ import {accountList} from "@/request/account.js";
 import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {useMailSearch} from "@/composables/use-mail-search.js";
+import {clearAuthenticatedSession} from '@/utils/session-state.js';
 
 defineExpose({ closeProfilePopup })
 
@@ -281,16 +278,6 @@ function selectAccount(account) {
   closeProfilePopup()
 }
 
-function openManageAddresses() {
-  closeProfilePopup()
-  router.push({ name: 'addresses' })
-}
-
-function openSettings() {
-  closeProfilePopup()
-  router.push({ name: 'setting' })
-}
-
 async function loadAccounts() {
   if (!hasPerm('account:query')) return
   const list = await accountList(0, 30)
@@ -346,7 +333,7 @@ function clickLogout() {
   closeProfilePopup()
   logoutLoading.value = true
   logout().then(() => {
-    localStorage.removeItem("token")
+    clearAuthenticatedSession()
     router.replace('/login')
   }).finally(() => {
     logoutLoading.value = false

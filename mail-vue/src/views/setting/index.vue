@@ -1,38 +1,80 @@
 <template>
   <div class="box">
-    <div class="container">
-      <div class="title">{{$t('profile')}}</div>
-      <div class="item">
-        <div>{{$t('username')}}</div>
-        <div>
-          <span v-if="setNameShow" class="edit-name-input">
-            <el-input v-model="accountName"  ></el-input>
-            <span class="edit-name" @click="setName">
-             {{$t('save')}}
-            </span>
-          </span>
-          <span v-else class="user-name">
-            <span >{{ userStore.user.name }}</span>
-            <span class="edit-name" @click="showSetName">
-             {{$t('change')}}
-            </span>
-          </span>
-        </div>
-      </div>
-      <div class="item">
-        <div>{{$t('emailAccount')}}</div>
-        <div>{{ userStore.user.email }}</div>
-      </div>
-      <div class="item">
-        <div>{{$t('password')}}</div>
-        <div>
-          <el-button type="primary" @click="pwdShow = true">{{$t('changePwdBtn')}}</el-button>
-        </div>
-      </div>
+    <div class="settings-content">
+    <div v-if="section === 'home'" class="settings-home">
+      <div class="settings-home-title">{{ $t('settings') }}</div>
+      <button class="settings-category-row" type="button" @click="router.push('/settings/account-security')">
+        <span class="settings-category-icon"><Icon icon="solar:shield-check-linear" width="22" height="22" /></span>
+        <span class="settings-category-copy"><strong>{{ $t('accountSecurity') }}</strong><small>{{ $t('accountSecurityDesc') }}</small></span>
+        <Icon class="settings-category-chevron" icon="solar:alt-arrow-right-linear" width="18" height="18" />
+      </button>
+      <button class="settings-category-row" type="button" @click="router.push('/settings/personalization')">
+        <span class="settings-category-icon"><Icon icon="solar:palette-linear" width="22" height="22" /></span>
+        <span class="settings-category-copy"><strong>{{ $t('personalization') }}</strong><small>{{ $t('personalizationDesc') }}</small></span>
+        <Icon class="settings-category-chevron" icon="solar:alt-arrow-right-linear" width="18" height="18" />
+      </button>
+      <button class="settings-category-row" type="button" @click="router.push('/settings/about')">
+        <span class="settings-category-icon"><Icon icon="solar:info-circle-linear" width="22" height="22" /></span>
+        <span class="settings-category-copy"><strong>{{ $t('about') }}</strong><small>{{ $t('aboutDesc') }}</small></span>
+        <Icon class="settings-category-chevron" icon="solar:alt-arrow-right-linear" width="18" height="18" />
+      </button>
     </div>
-    <div class="connected-accounts">
-      <div class="title">{{$t('connectedAccounts')}}</div>
-      <div class="connected-account-row">
+
+    <div v-else class="settings-subpage-header">
+      <button class="settings-back-button" type="button" :aria-label="$t('back')" @click="router.replace(settingsBackPath)">
+        <Icon icon="solar:arrow-left-linear" width="20" height="20" />
+      </button>
+      <h1>{{ $t(settingsTitleKey) }}</h1>
+    </div>
+
+    <div v-if="section === 'account'" class="settings-directory">
+      <div class="settings-directory-heading">{{ $t('accountLabel') }}</div>
+      <button v-for="item in accountEntries" :key="item.path" class="settings-category-row" type="button" @click="router.push(item.path)">
+        <span class="settings-category-icon"><Icon :icon="item.icon" width="22" height="22" /></span>
+        <span class="settings-category-copy"><strong>{{ $t(item.title) }}</strong><small>{{ $t(item.description) }}</small></span>
+        <Icon class="settings-category-chevron" icon="solar:alt-arrow-right-linear" width="18" height="18" />
+      </button>
+      <div class="settings-directory-heading security-heading">{{ $t('security') }}</div>
+      <button v-for="item in securityEntries" :key="item.path" class="settings-category-row" :class="{ 'danger-entry': item.danger }" type="button" @click="router.push(item.path)">
+        <span class="settings-category-icon"><Icon :icon="item.icon" width="22" height="22" /></span>
+        <span class="settings-category-copy"><strong>{{ $t(item.title) }}</strong><small>{{ $t(item.description) }}</small></span>
+        <Icon class="settings-category-chevron" icon="solar:alt-arrow-right-linear" width="18" height="18" />
+      </button>
+    </div>
+
+    <section v-if="section === 'profile'" class="settings-section profile-section">
+      <h2 class="settings-section-title">{{ $t('accountInformation') }}</h2>
+      <div class="settings-panel">
+        <div class="settings-row profile-row">
+          <span class="settings-row-title">{{ $t('username') }}</span>
+          <div class="profile-value">
+            <template v-if="setNameShow">
+              <el-input v-model="accountName" class="profile-name-input" @keyup.enter="setName" />
+              <button class="settings-text-action" type="button" @click="setName">{{ $t('save') }}</button>
+            </template>
+            <template v-else>
+              <span class="profile-value-text">{{ userStore.user.name }}</span>
+              <button class="settings-text-action" type="button" @click="showSetName">{{ $t('change') }}</button>
+            </template>
+          </div>
+        </div>
+        <div class="settings-row profile-row">
+          <span class="settings-row-title">{{ $t('emailAccount') }}</span>
+          <span class="profile-value-text">{{ userStore.user.email }}</span>
+        </div>
+        <div class="settings-row profile-row">
+          <span class="settings-row-title">{{ $t('password') }}</span>
+          <div class="profile-value">
+            <span class="profile-value-text" aria-hidden="true">••••••••</span>
+            <button class="settings-text-action" type="button" @click="pwdShow = true">{{ $t('change') }}</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section v-if="section === 'connected'" class="settings-section connected-accounts">
+      <h2 class="settings-section-title">{{ $t('linkedProviders') }}</h2>
+      <div class="settings-panel">
+      <div class="settings-row connected-account-row">
         <div class="connected-account-details">
           <el-avatar
             v-if="githubAccount.connected && githubAccount.avatarUrl"
@@ -52,7 +94,7 @@
         <el-button v-if="githubAccount.connected" @click="disconnectGithub" :loading="githubLoading">{{$t('disconnect')}}</el-button>
         <el-button v-else type="primary" @click="connectGithub" :loading="githubLoading">{{$t('connect')}}</el-button>
       </div>
-      <div class="connected-account-row">
+      <div class="settings-row connected-account-row">
         <div class="connected-account-details">
           <el-avatar
             v-if="googleAccount.connected && googleAccount.avatarUrl"
@@ -72,13 +114,18 @@
         <el-button v-if="googleAccount.connected" @click="disconnectGoogle" :loading="googleLoading">{{$t('disconnect')}}</el-button>
         <el-button v-else type="primary" @click="connectGoogle" :loading="googleLoading">{{$t('connect')}}</el-button>
       </div>
-    </div>
+      </div>
+    </section>
+    <section v-if="section === 'addresses'" class="settings-section addresses-page">
+      <h2 class="settings-section-title">{{ $t('managedAddresses') }}</h2>
+      <div class="settings-panel addresses-panel"><account page-mode :show-page-intro="false" /></div>
+    </section>
 
-    <div class="appearance">
-      <div class="title">{{ $t('visualStyle') }}</div>
+    <section v-if="section === 'personalization'" class="settings-section appearance">
+      <h2 class="settings-section-title">{{ $t('visualStyle') }}</h2>
 
-      <div class="appearance-editor">
-        <div class="appearance-row appearance-mode-row">
+      <div class="settings-panel appearance-editor">
+        <div class="settings-row appearance-row appearance-mode-row">
           <div class="appearance-label">
             <span>{{ $t('mode') }}</span>
             <small>{{ $t('appearanceModeDesc') }}</small>
@@ -100,7 +147,7 @@
           </div>
         </div>
 
-        <div class="appearance-row">
+        <div class="settings-row appearance-row">
           <div class="appearance-label">
             <span>{{ $t('theme') }}</span>
             <small>{{ activePaletteLabel }}</small>
@@ -115,7 +162,7 @@
           </div>
         </div>
 
-        <div v-for="token in colorTokens" :key="token.key" class="appearance-row appearance-color-row">
+        <div v-for="token in colorTokens" :key="token.key" class="settings-row appearance-row appearance-color-row">
           <div class="appearance-label"><span>{{ token.label }}</span></div>
           <div class="color-control">
             <input :ref="(element) => { colorInputs[token.key] = element }" class="color-native-input" type="color" :value="activePalette[token.key]" :aria-label="token.label" @input="setPaletteColor(token.key, $event.target.value)" />
@@ -124,15 +171,17 @@
           </div>
         </div>
 
-        <div class="appearance-row appearance-reset-row">
+        <div class="settings-row appearance-row appearance-reset-row">
           <span>{{ $t('resetThemeDesc', { theme: activePaletteLabel }) }}</span>
           <el-button @click="resetPalette">{{ $t('resetTheme') }}</el-button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="language">
-      <div class="title">{{$t('language')}}</div>
+    <section v-if="section === 'personalization'" class="settings-section language">
+      <h2 class="settings-section-title">{{ $t('language') }}</h2>
+      <div class="settings-panel"><div class="settings-row settings-control-row">
+      <span class="settings-row-title">{{ $t('language') }}</span>
       <el-select
           :model-value="langSelect"
           class="language-select"
@@ -142,10 +191,12 @@
         <el-option label="简体中文" value="zh" @pointerdown.prevent.stop="changeLang('zh')"/>
         <el-option label="English" value="en" @pointerdown.prevent.stop="changeLang('en')"/>
       </el-select>
-    </div>
+      </div></div>
+    </section>
 
-    <div class="time-format">
-      <div class="title">{{ $t('timeFormat') }}</div>
+    <section v-if="section === 'personalization'" class="settings-section time-format">
+      <h2 class="settings-section-title">{{ $t('timeFormat') }}</h2>
+      <div class="settings-panel"><div class="settings-row settings-control-row">
       <div class="time-format-options" role="radiogroup" :aria-label="$t('timeFormat')">
         <button
           v-for="option in timeFormatOptions"
@@ -156,14 +207,72 @@
           :aria-checked="settingStore.timeFormat === option.value"
           role="radio"
           @click="settingStore.timeFormat = option.value"
-        >{{ option.label }}</button>
+        >
+          <span class="time-format-option-label">{{ option.label }}</span>
+          <span class="time-format-option-example">{{ option.example }}</span>
+        </button>
       </div>
-    </div>
+      </div></div>
+    </section>
 
-    <div class="notification">
-      <div class="title">{{ $t('notification') }}</div>
+    <section v-if="section === 'personalization'" class="settings-section swipe-actions-setting">
+      <h2 class="settings-section-title">{{ $t('swipeActions') }}</h2>
+      <div class="settings-panel swipe-actions-options">
+        <div class="settings-row swipe-action-setting-row">
+          <span class="swipe-action-direction">← {{ $t('swipeLeft') }}</span>
+          <el-select v-model="settingStore.swipeLeftAction" class="swipe-action-select" :aria-label="$t('swipeLeft')">
+            <el-option
+                v-for="option in swipeActionOptions"
+                :key="option.id"
+                :label="$t(option.labelKey)"
+                :value="option.id"
+            />
+          </el-select>
+        </div>
+        <div class="settings-row swipe-action-setting-row">
+          <span class="swipe-action-direction">{{ $t('swipeRight') }} →</span>
+          <el-select v-model="settingStore.swipeRightAction" class="swipe-action-select" :aria-label="$t('swipeRight')">
+            <el-option
+                v-for="option in swipeActionOptions"
+                :key="option.id"
+                :label="$t(option.labelKey)"
+                :value="option.id"
+            />
+          </el-select>
+        </div>
+      </div>
+    </section>
 
-      <div class="notification-row">
+    <section v-if="section === 'personalization'" class="settings-section mail-density-setting">
+      <h2 class="settings-section-title">{{ $t('mailList') }}</h2>
+      <div class="settings-panel"><div class="settings-row settings-control-row">
+      <div class="settings-row-copy">
+        <span class="settings-row-title">{{ $t('mailListDensity') }}</span>
+        <small>{{ $t('mailListDensityDesc') }}</small>
+      </div>
+      <div class="time-format-options" role="radiogroup" :aria-label="$t('mailListDensity')">
+        <button
+          v-for="density in ['compact', 'normal']"
+          :key="density"
+          type="button"
+          class="time-format-option nova-segmented-button"
+          :class="{ active: settingStore.mailListDensity === density }"
+          :aria-checked="settingStore.mailListDensity === density"
+          :disabled="densitySaving"
+          role="radio"
+          @click="changeMailDensity(density)"
+        >
+          <span class="time-format-option-label">{{ $t(density === 'compact' ? 'mailDensityCompact' : 'mailDensityNormal') }}</span>
+        </button>
+      </div>
+      </div></div>
+    </section>
+
+    <section v-if="section === 'personalization'" class="settings-section notification">
+      <h2 class="settings-section-title">{{ $t('notification') }}</h2>
+      <div class="settings-panel">
+
+      <div class="settings-row notification-row">
         <div class="notification-label">
           <span>{{ $t('pushNotification') }}</span>
           <small class="notification-status" :class="{ 'is-on': pushOn }">{{ pushStatusText }}</small>
@@ -179,12 +288,12 @@
         </div>
       </div>
 
-      <div class="notification-row">
+      <div class="settings-row notification-row">
         <span class="notification-label">{{ $t('notificationSound') }}</span>
         <el-switch v-model="settingStore.notificationSound"/>
       </div>
 
-      <div class="notification-row">
+      <div class="settings-row notification-row">
         <span class="notification-label">{{ $t('notificationSoundType') }}</span>
         <div class="notification-actions">
           <el-select v-model="soundType" class="notification-select">
@@ -201,21 +310,75 @@
           </el-button>
         </div>
       </div>
+      </div>
 
       <!-- A browser that refuses to play leaves the reader with a silent app and
            no explanation, and the console is not available on a phone. -->
       <p v-if="notificationSoundStatus.lastError" class="notification-sound-error">
         ⚠ {{ $t('notificationSoundFailed') }}: {{ notificationSoundStatus.lastError }}
       </p>
+    </section>
+    <section v-if="section === 'delete' && canDeleteAccount" class="settings-section danger-section">
+      <h2 class="settings-section-title danger-title">{{ $t('dangerZone') }}</h2>
+      <div class="settings-panel">
+        <div class="settings-row danger-row">
+          <div class="settings-row-copy">
+            <span class="settings-row-title">{{ $t('deleteUser') }}</span>
+            <small>{{ $t('delAccountMsg') }}</small>
+          </div>
+          <el-button class="settings-danger-button" type="danger" @click="deleteConfirm">{{ $t('deleteUserBtn') }}</el-button>
+        </div>
+      </div>
+    </section>
+    <template v-if="section === 'sessions'">
+      <section class="settings-section security">
+        <h2 class="settings-section-title">{{ $t('devicesAndSessions') }}</h2>
+        <div class="settings-panel session-list" v-loading="sessionsLoading">
+          <div v-for="session in sessions" :key="session.id" class="settings-row session-row">
+            <span class="session-icon" aria-hidden="true"><Icon icon="solar:devices-linear" width="20" height="20" /></span>
+            <div class="session-details">
+              <div class="session-title">{{ session.browser }} · {{ session.os }}</div>
+              <div class="session-meta">{{ session.deviceType }} · {{ session.location }}</div>
+              <div class="session-meta">{{ $t('lastActive') }}: {{ formatSessionTime(session.lastActiveAt) }} · {{ session.ipAddress }}</div>
+              <div class="session-meta">{{ $t('loginTime') }}: {{ formatSessionTime(session.createdAt) }}</div>
+            </div>
+            <div class="session-action">
+              <span v-if="session.current" class="session-current">{{ $t('thisDevice') }}</span>
+              <el-button v-else text type="danger" :loading="revokingSession === session.id" @click="signOutSession(session)">{{ $t('signOut') }}</el-button>
+            </div>
+          </div>
+          <div v-if="!sessions.length && !sessionsLoading" class="session-empty">{{ $t('noActiveSessions') }}</div>
+        </div>
+        <el-button v-if="sessions.some(session => !session.current)" class="revoke-others-button" @click="signOutOtherSessions">{{ $t('signOutOtherDevices') }}</el-button>
+      </section>
+      <section class="settings-section login-alerts">
+        <h2 class="settings-section-title">{{ $t('loginAlerts') }}</h2>
+        <div class="settings-panel">
+          <div class="settings-row security-setting-row"><span>{{ $t('email') }}</span><el-switch v-model="loginAlerts.email" :loading="loginAlertsLoading" @change="saveLoginAlerts" /></div>
+          <div class="settings-row security-setting-row"><div><span>{{ $t('telegram') }}</span><small v-if="!loginAlerts.telegramAvailable">{{ $t('notConnected') }}</small></div><el-switch v-model="loginAlerts.telegram" :disabled="!loginAlerts.telegramAvailable" :loading="loginAlertsLoading" @change="saveLoginAlerts" /></div>
+        </div>
+      </section>
+    </template>
+    <div v-if="section === 'about'" class="about-page">
+      <div class="about-brand"><img src="/icons/nova-mail-192.png" alt="Nova Mail" /><strong>Nova Mail</strong></div>
+      <p>{{ $t('aboutDescription') }}</p>
+      <div class="settings-panel about-details">
+        <div class="settings-row">
+          <span>{{ $t('author') }}</span>
+          <a class="about-link" href="https://github.com/beihaime" target="_blank" rel="noopener noreferrer">
+            beihaime <span aria-hidden="true">→</span>
+          </a>
+        </div>
+        <div class="settings-row">
+          <span>{{ $t('repository') }}</span>
+          <a class="about-link" href="https://github.com/beihaime/nova-mail" target="_blank" rel="noopener noreferrer">
+            github.com/beihaime/nova-mail <span aria-hidden="true">→</span>
+          </a>
+        </div>
+        <div class="settings-row"><span>{{ $t('appName') }}</span><span>Nova Mail</span></div>
+        <div class="settings-row"><span>{{ $t('appVersion') }}</span><span>{{ appVersion }}</span></div>
+      </div>
     </div>
-    <div class="del-email" v-perm="'my:delete'">
-      <div class="title">{{$t('deleteUser')}}</div>
-      <div style="color: var(--regular-text-color);">
-        {{$t('delAccountMsg')}}
-      </div>
-      <div>
-        <el-button type="primary" @click="deleteConfirm">{{$t('deleteUserBtn')}}</el-button>
-      </div>
     </div>
     <el-dialog v-model="pwdShow" :title="$t('changePassword')" width="340">
       <div class="update-pwd">
@@ -230,17 +393,24 @@
 import {onMounted, reactive, ref, computed, watch, defineOptions} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
+import {hasPerm} from '@/perm/perm.js';
 import router from "@/router/index.js";
 import {useRoute} from "vue-router";
 import {accountSetName} from "@/request/account.js";
 import {useAccountStore} from "@/store/account.js";
 import {useI18n} from "vue-i18n";
 import {useSettingStore} from "@/store/setting.js";
+import account from '@/layout/account/index.vue';
+import packageInfo from '../../../package.json';
 import {useUiStore} from "@/store/ui.js";
+import {getSessions, revokeSession, revokeOtherSessions, getLoginAlerts, updateLoginAlerts} from '@/request/security.js';
 import {connectGithubAccount, disconnectGithubAccount, githubConnectedAccount, connectGoogleAccount, disconnectGoogleAccount, googleConnectedAccount} from '@/request/ouath.js';
 import {Icon} from '@iconify/vue';
 import {applyThemeTransition} from "@/utils/theme-transition.js";
 import {availablePresets, PALETTE_KEYS, parseThemeImport, normalizeHex} from '@/utils/theme-palette.js';
+import {SWIPE_ACTION_OPTIONS} from '@/utils/swipe-actions.js';
+import {clearAuthenticatedSession} from '@/utils/session-state.js';
+import {setMailListDensity} from '@/request/preferences.js';
 import {
   NOTIFICATION_SOUNDS,
   notificationSoundStatus,
@@ -264,18 +434,69 @@ const settingStore = useSettingStore()
 const uiStore = useUiStore()
 const userStore = useUserStore();
 const route = useRoute();
+const accountPath = '/settings/account-security'
+const section = computed(() => {
+  const path = route.path
+  if (path === accountPath) return 'account'
+  if (path === `${accountPath}/profile`) return 'profile'
+  if (path === `${accountPath}/addresses`) return 'addresses'
+  if (path === `${accountPath}/connected-accounts`) return 'connected'
+  if (path === `${accountPath}/sessions`) return 'sessions'
+  if (path === `${accountPath}/delete-account`) return 'delete'
+  if (path === '/settings/personalization') return 'personalization'
+  if (path === '/settings/about') return 'about'
+  return 'home'
+})
+const settingsBackPath = computed(() => ['profile', 'addresses', 'connected', 'sessions', 'delete'].includes(section.value) ? accountPath : '/settings')
+const settingsTitleKey = computed(() => ({
+  account: 'accountSecurity', profile: 'profile', addresses: 'emailAddresses',
+  connected: 'connectedAccounts', sessions: 'deviceSessions', delete: 'deleteUser',
+  personalization: 'personalization', about: 'about',
+})[section.value] || 'settings')
+const accountEntries = [
+  { path: `${accountPath}/profile`, title: 'profile', description: 'profileDesc', icon: 'solar:user-circle-linear' },
+  { path: `${accountPath}/addresses`, title: 'emailAddresses', description: 'emailAddressesDesc', icon: 'solar:letter-linear' },
+  { path: `${accountPath}/connected-accounts`, title: 'connectedAccounts', description: 'connectedAccountsDesc', icon: 'solar:link-linear' },
+]
+const canDeleteAccount = computed(() => Array.isArray(userStore.user?.permKeys) && hasPerm('my:delete'))
+const securityEntries = computed(() => [
+  { path: `${accountPath}/sessions`, title: 'deviceSessions', description: 'deviceSessionsDesc', icon: 'solar:devices-linear' },
+  ...(canDeleteAccount.value ? [{ path: `${accountPath}/delete-account`, title: 'deleteUser', description: 'deleteAccountDesc', icon: 'solar:trash-bin-trash-linear', danger: true }] : []),
+])
+const appVersion = packageInfo.version ? `v${String(packageInfo.version).replace(/^v/i, '')}` : ''
+const densitySaving = ref(false)
+async function changeMailDensity(density) {
+  if (densitySaving.value || settingStore.mailListDensity === density) return
+  const previous = settingStore.mailListDensity
+  settingStore.mailListDensity = density
+  densitySaving.value = true
+  try {
+    await setMailListDensity(density)
+  } catch (error) {
+    settingStore.mailListDensity = previous
+    console.error('Nova Mail: unable to save mail list density', error)
+  } finally {
+    densitySaving.value = false
+  }
+}
 const setPwdLoading = ref(false)
 const setNameShow = ref(false)
 const accountName = ref(null)
 const langSelect = ref(settingStore.lang)
 const timeFormatOptions = computed(() => [
-  { value: '24h', label: t('timeFormat24h') },
-  { value: '12h', label: t('timeFormat12h') },
+  { value: '24h', label: t('timeFormat24h'), example: t('timeFormatExample24h') },
+  { value: '12h', label: t('timeFormat12h'), example: t('timeFormatExample12h') },
 ])
+const swipeActionOptions = SWIPE_ACTION_OPTIONS
 const githubLoading = ref(false)
 const githubAccount = reactive({ connected: false, login: '', avatarUrl: '' })
 const googleLoading = ref(false)
 const googleAccount = reactive({ connected: false, email: '', avatarUrl: '' })
+const sessions = ref([])
+const sessionsLoading = ref(false)
+const revokingSession = ref('')
+const loginAlertsLoading = ref(false)
+const loginAlerts = reactive({ email: true, telegram: false, telegramAvailable: false })
 const themeImportInput = ref(null)
 const colorInputs = reactive({})
 
@@ -427,6 +648,54 @@ async function refreshPushState() {
   }
 }
 
+function formatSessionTime(value) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000))
+  if (minutes < 1) return t('justNow')
+  if (minutes < 60) return t('minutesAgo', { count: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('hoursAgo', { count: hours })
+  return new Intl.DateTimeFormat(settingStore.lang, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+async function refreshSecurity() {
+  sessionsLoading.value = true
+  try {
+    const [sessionRows, alertSettings] = await Promise.all([getSessions(), getLoginAlerts()])
+    sessions.value = sessionRows || []
+    Object.assign(loginAlerts, alertSettings || {})
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+async function signOutSession(session) {
+  revokingSession.value = session.id
+  try {
+    await revokeSession(session.id)
+    sessions.value = sessions.value.filter((item) => item.id !== session.id)
+  } finally {
+    revokingSession.value = ''
+  }
+}
+
+function signOutOtherSessions() {
+  ElMessageBox.confirm(t('signOutOtherDevicesConfirm'), { confirmButtonText: t('signOut'), cancelButtonText: t('cancel'), type: 'warning' }).then(async () => {
+    await revokeOtherSessions()
+    sessions.value = sessions.value.filter((session) => session.current)
+    ElMessage({ message: t('signedOutOtherDevices'), type: 'success', plain: true })
+  })
+}
+
+async function saveLoginAlerts() {
+  if (loginAlertsLoading.value) return
+  loginAlertsLoading.value = true
+  try {
+    Object.assign(loginAlerts, await updateLoginAlerts({ email: loginAlerts.email, telegram: loginAlerts.telegram }))
+  } finally {
+    loginAlertsLoading.value = false
+  }
+}
+
 const PUSH_FAILURE_MESSAGE = {
   [PUSH_STATUS.DENIED]: 'pushDeniedMsg',
   [PUSH_STATUS.UNSUPPORTED]: 'pushUnsupportedMsg',
@@ -501,32 +770,42 @@ defineOptions({
 })
 
 onMounted(async () => {
+  if (section.value === 'about' || section.value === 'home') return
+
   // Normalise a value persisted by an older build, then warm the sound the
   // user is most likely to audition.
-  settingStore.notificationSoundType = setNotificationSoundType(settingStore.notificationSoundType)
-  preloadNotificationSound(settingStore.notificationSoundType)
-
-  try {
-    const account = await githubConnectedAccount()
-    Object.assign(githubAccount, account)
-    userStore.githubConnected = Boolean(account?.connected)
-    userStore.githubAvatar = account?.connected && account?.avatarUrl ? account.avatarUrl : ''
-    const google = await googleConnectedAccount()
-    Object.assign(googleAccount, google)
-    userStore.googleConnected = Boolean(google?.connected)
-    userStore.googleAvatar = google?.connected && google?.avatarUrl ? google.avatarUrl : ''
-    const status = route.query.google
-    if (status === 'connected') ElMessage({ message: t('googleConnected'), type: 'success', plain: true })
-    if (status === 'failed') ElMessage({ message: t('googleLoginFailed'), type: 'warning', plain: true })
-    if (status === 'denied') ElMessage({ message: t('googleAuthorizationCancelled'), type: 'warning', plain: true })
-  } catch {
-    // The endpoint can be unavailable until the non-destructive migration runs.
+  if (section.value === 'personalization') {
+    settingStore.notificationSoundType = setNotificationSoundType(settingStore.notificationSoundType)
+    preloadNotificationSound(settingStore.notificationSoundType)
   }
 
-  // Re-register a device whose endpoint rotated (or whose row was cleaned up
-  // after a 404/410), then show the real state. Both are best effort.
-  await syncPushSubscription()
-  await refreshPushState()
+  if (section.value === 'connected') {
+    try {
+      const account = await githubConnectedAccount()
+      Object.assign(githubAccount, account)
+      userStore.githubConnected = Boolean(account?.connected)
+      userStore.githubAvatar = account?.connected && account?.avatarUrl ? account.avatarUrl : ''
+      const google = await googleConnectedAccount()
+      Object.assign(googleAccount, google)
+      userStore.googleConnected = Boolean(google?.connected)
+      userStore.googleAvatar = google?.connected && google?.avatarUrl ? google.avatarUrl : ''
+      const status = route.query.google
+      if (status === 'connected') ElMessage({ message: t('googleConnected'), type: 'success', plain: true })
+      if (status === 'failed') ElMessage({ message: t('googleLoginFailed'), type: 'warning', plain: true })
+      if (status === 'denied') ElMessage({ message: t('googleAuthorizationCancelled'), type: 'warning', plain: true })
+    } catch {
+      // The endpoint can be unavailable until the non-destructive migration runs.
+    }
+  }
+
+  if (section.value === 'sessions') await refreshSecurity()
+
+  if (section.value === 'personalization') {
+    // Re-register a device whose endpoint rotated (or whose row was cleaned up
+    // after a 404/410), then show the real state. Both are best effort.
+    await syncPushSubscription()
+    await refreshPushState()
+  }
 })
 
 async function connectGithub() {
@@ -664,7 +943,7 @@ const deleteConfirm = () => {
     type: 'warning'
   }).then(() => {
     userDelete().then(() => {
-      localStorage.removeItem('token');
+      clearAuthenticatedSession();
       router.replace('/login');
       ElMessage({
         message: t('delSuccessMsg'),
@@ -729,15 +1008,234 @@ function submitPwd() {
 .box {
   /* The page owns its width so long account names / emails can never stretch it
      past the viewport; content shrinks instead (see min-width: 0 below). */
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 40px 40px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 40px 32px;
+
+  @media (min-width: 768px) {
+    /* A tall subpage must not move the shared centered column when its
+       scrollbar appears; reserve an equal gutter on both sides. */
+    scrollbar-gutter: stable both-edges;
+  }
 
   @media (max-width: 767px) {
-    padding: 30px 30px;
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px 30px;
+    /* Mobile browsers already use overlay scroll indicators. Avoid a desktop
+       scrollbar taking 10px from just the long subpages in narrow previews. */
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
   }
+
+  .settings-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 1040px;
+    min-width: 0;
+    margin-inline: auto;
+  }
+
+  .settings-section {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    margin: 0 0 30px;
+  }
+
+  .settings-section-title {
+    margin: 0;
+    color: var(--nm-text-primary);
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  .settings-section-description {
+    margin: -6px 0 0;
+    color: var(--nm-text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .settings-panel {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--nova-divider);
+    border-radius: 12px;
+    background: var(--nova-surface);
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 14px 18px;
+    box-sizing: border-box;
+  }
+
+  .settings-row + .settings-row { border-top: 1px solid var(--nova-divider-soft); }
+  .settings-row-title { color: var(--nm-text-primary); font-size: 14px; font-weight: 500; }
+  .settings-row-copy { display: grid; min-width: 0; gap: 4px; }
+  .settings-row-copy small { color: var(--nm-text-muted); font-size: 13px; line-height: 1.4; }
+
+  .settings-text-action {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-accent);
+    background: transparent;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .settings-text-action:hover { background: var(--nm-hover); }
+  .settings-text-action:active { background: var(--nova-button-active); }
+  .settings-text-action:focus-visible { outline: none; box-shadow: var(--nova-button-focus-ring); }
+
+  .settings-home {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    max-width: 760px;
+    margin-inline: auto;
+  }
+
+  .settings-directory { display: grid; gap: 8px; align-content: start; }
+  .settings-directory-heading { margin: 6px 14px 3px; color: var(--nm-text-muted); font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+  .settings-directory-heading.security-heading { margin-top: 22px; }
+  .settings-category-row.danger-entry .settings-category-icon,
+  .settings-category-row.danger-entry .settings-category-copy strong { color: var(--nova-danger); }
+  .settings-category-row.danger-entry .settings-category-icon { background: color-mix(in srgb, var(--nova-danger) 10%, transparent); }
+  .addresses-page { flex: 1 1 auto; min-height: 0; grid-template-rows: auto minmax(320px, 1fr); }
+  .addresses-panel { min-height: 0; height: 100%; }
+  .addresses-panel :deep(.account-box.address-page) { border: 0 !important; background: var(--nova-surface); }
+  .addresses-panel :deep(.account-box.address-page .head-opt) { max-width: none; padding-inline: 18px; }
+  .addresses-panel :deep(.account-box.address-page .scrollbar) { max-width: none; }
+  .addresses-panel :deep(.account-box.address-page .item) { margin-inline: 18px; }
+
+  .settings-home-title {
+    margin-bottom: 12px;
+    color: var(--nm-text-primary);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .settings-category-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 74px;
+    padding: 13px 14px;
+    gap: 14px;
+    border: 1px solid transparent;
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-text-primary);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--nova-motion-fast) var(--nova-motion-ease), border-color var(--nova-motion-fast) var(--nova-motion-ease);
+  }
+
+  .settings-category-row:hover,
+  .settings-category-row:focus-visible {
+    border-color: var(--nova-divider);
+    background: var(--nm-hover);
+  }
+
+  .settings-category-row:focus-visible,
+  .settings-back-button:focus-visible {
+    outline: none;
+    box-shadow: var(--nova-button-focus-ring);
+  }
+
+  .settings-category-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 12px;
+    color: var(--nm-accent);
+    background: var(--nm-accent-subtle);
+  }
+
+  .settings-category-copy {
+    display: grid;
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 3px;
+  }
+
+  .settings-category-copy strong { font-size: 15px; font-weight: 600; }
+  .settings-category-copy small { overflow: hidden; color: var(--nm-text-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .settings-category-chevron { flex: 0 0 auto; color: var(--nm-text-muted); }
+
+  .settings-subpage-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    margin-bottom: 28px;
+  }
+
+  .settings-subpage-header h1 { margin: 0; color: var(--nm-text-primary); font-size: 22px; line-height: 1.2; }
+  .settings-back-button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; color: var(--nm-text-secondary); background: transparent; cursor: pointer; }
+  .settings-back-button:hover { color: var(--nm-text-primary); background: var(--nm-hover); }
+
+  .about-page { display: grid; gap: 22px; color: var(--nm-text-secondary); }
+  .about-brand { display: flex; align-items: center; gap: 12px; color: var(--nm-text-primary); font-size: 20px; font-weight: 700; }
+  .about-brand img { width: 40px; height: 40px; border-radius: 10px; }
+  .about-page p { margin: 0; color: var(--nm-text-secondary); line-height: 1.6; }
+  .about-details { display: grid; gap: 0; }
+  .about-details > div { justify-content: space-between; font-size: 14px; }
+  .about-details > div > span:last-child,
+  .about-details > div > .about-link { min-width: 0; color: var(--nm-text-primary); text-align: right; }
+  .about-link { max-width: 68%; overflow: hidden; color: var(--nm-accent) !important; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; transition: color var(--nova-motion-fast) var(--nova-motion-ease), opacity var(--nova-motion-fast) var(--nova-motion-ease); }
+  .about-link:hover { color: var(--nm-accent-strong, var(--nm-accent)) !important; }
+  .about-link:active { opacity: .72; }
+  .about-link:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--nova-button-focus-ring); }
+
+  .account-link-section {
+    order: 4;
+    display: grid;
+    gap: 12px;
+    margin-bottom: 40px;
+    font-size: 14px;
+  }
+
+  .account-link-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: min(100%, 460px);
+    min-height: 52px;
+    padding: 9px 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-text-primary);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .account-link-row:hover { background: var(--nm-hover); }
+  .account-link-row > span { display: grid; gap: 2px; }
+  .account-link-row small { color: var(--nm-text-muted); font-size: 12px; }
 
   .update-pwd {
     display: flex;
@@ -750,110 +1248,97 @@ function submitPwd() {
     font-weight: bold;
   }
 
-  .container {
-    font-size: 14px;
+  .profile-row {
     display: grid;
-    gap: 20px;
-    margin-bottom: 40px;
-
-    .item {
-      display: grid;
-      grid-template-columns: 50px minmax(0, 1fr);
-      gap: 140px;
-      position: relative;
-      /* Grid items default to `min-width: auto`, so a nowrap value (user name,
-         email) would ratchet the column open and widen the whole page. */
-      min-width: 0;
-
-      > div {
-        min-width: 0;
-      }
-
-      .user-name {
-        display: grid;
-        grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-        min-width: 0;
-        span:first-child {
-          min-width: 0;
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-        }
-      }
-
-      .edit-name-input {
-        position: absolute;
-        bottom: -6px;
-        .el-input {
-          width: min(200px,calc(100vw - 222px));
-        }
-      }
-
-      .edit-name {
-        color: #4dabff;
-        padding-left: 10px;
-        cursor: pointer;
-      }
-
-      @media (max-width: 767px) {
-        gap: 24px;
-      }
-
-      div:first-child {
-        font-weight: bold;
-      }
-
-      div:last-child {
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-      }
-    }
+    grid-template-columns: minmax(120px, 26%) minmax(0, 1fr);
   }
+
+  .profile-value {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+  }
+
+  .profile-value-text {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--nm-text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .profile-name-input { flex: 1 1 auto; min-width: 0; width: min(100%, 280px); }
+
+  .profile-value .settings-text-action { margin-left: auto; }
 
   .language {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-bottom: 40px;
-
     .language-select {
-      width: 100px;
+      width: min(100%, 180px);
     }
   }
 
-  .time-format {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-bottom: 40px;
-  }
+  .settings-control-row { justify-content: space-between; }
 
   .time-format-options {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: min(100%, 320px);
     align-self: flex-start;
-    gap: 6px;
+    gap: 8px;
   }
 
   .time-format-option {
-    min-width: 104px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-width: 0;
+    min-height: 58px;
+    padding: 9px 12px;
+    border: 1px solid var(--nm-border);
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-text-secondary);
+    background: var(--nm-surface-elevated);
+    text-align: left;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+  }
+
+  .time-format-option:hover:not(:disabled) {
+    border-color: var(--nm-accent);
+    color: var(--nm-text-primary);
+    background: var(--nm-hover);
+  }
+
+  .time-format-option.active {
+    border-color: var(--nm-accent);
+    color: var(--nm-accent);
+    background: var(--nm-accent-subtle);
+  }
+
+  .time-format-option:focus-visible {
+    outline: none;
+    box-shadow: var(--nova-button-focus-ring);
+  }
+
+  .time-format-option-label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .time-format-option-example {
+    color: var(--nm-text-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
   }
 
   .connected-accounts {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 40px;
     font-size: 14px;
 
     .connected-account-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 14px 16px;
-      border: 1px solid var(--el-border-color-lighter);
-      border-radius: 12px;
-      min-width: 0;
+      min-height: 72px;
     }
 
     .connected-account-details {
@@ -932,32 +1417,93 @@ function submitPwd() {
     }
   }
 
-  .del-email {
-    font-size: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+  .danger-title { color: var(--nm-danger); }
+  .danger-row { justify-content: space-between; }
+  .danger-row :deep(.el-button) { flex: 0 0 auto; }
+  .danger-row :deep(.settings-row-copy small) { color: var(--nm-text-secondary); }
+
+  /* Account deletion is the only destructive action on this page. Its solid
+     treatment is deliberately scoped so mail-toolbar danger buttons can keep
+     their compact outline/hover affordance. */
+  .danger-row :deep(.settings-danger-button.el-button--danger) {
+    border-color: var(--nm-danger);
+    color: var(--nm-danger-foreground);
+    background: var(--nm-danger);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--nm-danger) 28%, transparent);
+    opacity: 1;
+  }
+
+  .danger-row :deep(.settings-danger-button.el-button--danger:not(.is-disabled):hover) {
+    border-color: var(--nm-danger-hover);
+    color: var(--nm-danger-foreground);
+    background: var(--nm-danger-hover);
+    box-shadow: 0 3px 8px color-mix(in srgb, var(--nm-danger) 24%, transparent);
+  }
+
+  .danger-row :deep(.settings-danger-button.el-button--danger:not(.is-disabled):active) {
+    border-color: var(--nm-danger-active);
+    color: var(--nm-danger-foreground);
+    background: var(--nm-danger-active);
+  }
+
+  .danger-row :deep(.settings-danger-button.el-button--danger:focus-visible) {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--nm-danger-surface), 0 0 0 4px var(--nm-danger-border);
+  }
+
+  .danger-row :deep(.settings-danger-button.el-button--danger.is-disabled),
+  .danger-row :deep(.settings-danger-button.el-button--danger:disabled) {
+    border-color: var(--nm-danger-border);
+    color: var(--nm-text-secondary);
+    background: var(--nm-danger-surface);
+    box-shadow: none;
   }
 }
 
+.mail-density-setting { order: 1; }
+.language { order: 2; }
+.appearance { order: 3; }
+.time-format { order: 4; }
+.swipe-actions-setting { order: 5; }
+.notification { order: 6; }
+
   /* ---------- Notification sound ---------- */
-  .notification {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-bottom: 40px;
+  .session-list { display: grid; min-height: 64px; }
+  .session-row { min-height: 98px; }
+  .session-icon { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; color: var(--nm-text-secondary); background: var(--nm-accent-subtle); }
+  .session-details { min-width: 0; flex: 1; }
+  .session-title { color: var(--nm-text-primary); font-size: 14px; font-weight: 600; }
+  .session-meta { color: var(--nm-text-muted); font-size: 12px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-action { display: flex; flex: 0 0 120px; justify-content: flex-end; align-items: center; }
+  .session-current { color: var(--el-color-primary); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .session-empty { padding: 18px; color: var(--nm-text-muted); }
+  .revoke-others-button { justify-self: start; }
+  .security-setting-row { justify-content: space-between; }
+  .security-setting-row small { display: block; color: var(--nm-text-muted); font-size: 12px; margin-top: 2px; }
+
+  .swipe-action-setting-row {
+    justify-content: space-between;
+  }
+
+  .swipe-action-direction {
+    color: var(--nm-text-secondary);
     font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .swipe-action-select {
+    width: 180px;
+    flex: 0 1 180px;
+  }
+
+  @media (max-width: 767px) {
+    .swipe-action-setting-row { gap: 10px; }
+    .swipe-action-direction { font-size: 13px; }
+    .swipe-action-select { width: 160px; flex-basis: 160px; }
   }
 
   .notification-row {
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 18px;
-    padding: 14px 16px;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: 12px;
-    min-width: 0;
   }
 
   .notification-label { min-width: 0; }
@@ -1018,29 +1564,14 @@ function submitPwd() {
   }
 
   /* ---------- Appearance ---------- */
-  .appearance {
-    margin-bottom: 34px;
-  }
-
   .appearance-editor {
-    margin-top: 14px;
-    overflow: hidden;
-    border: 1px solid var(--nova-divider);
-    border-radius: 12px;
-    background: var(--nova-surface);
+    margin-top: 0;
   }
 
   .appearance-row {
-    min-height: 58px;
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 22px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--nova-divider-soft);
   }
 
-  .appearance-row:last-child { border-bottom: 0; }
   .appearance-mode-row { align-items: flex-start; }
 
   .appearance-label {
@@ -1180,8 +1711,31 @@ function submitPwd() {
   .appearance-reset-row :deep(.el-button) { flex: 0 0 auto; }
 
   @media (max-width: 767px) {
+    .settings-section { margin-bottom: 24px; }
+    .settings-row { gap: 12px; min-height: 58px; padding: 12px 14px; }
+    .profile-row { grid-template-columns: minmax(80px, 30%) minmax(0, 1fr); }
+    .profile-value { gap: 4px; }
+    .profile-value .settings-text-action { padding-inline: 4px; }
+    .mail-density-setting .settings-control-row { flex-direction: column; align-items: stretch; }
+    .session-row { align-items: flex-start; }
+    .session-icon { flex-basis: 30px; width: 30px; height: 30px; }
+    .session-action { flex-basis: 80px; min-width: 0; }
+    .session-current { text-align: right; white-space: normal; }
+    .session-meta { white-space: normal; overflow-wrap: anywhere; }
+    .danger-row { flex-wrap: wrap; }
+    .danger-row :deep(.el-button) { margin-left: auto; }
+    .addresses-panel :deep(.account-box.address-page .head-opt) { padding-inline: 14px; }
+    .addresses-panel :deep(.account-box.address-page .item) { margin-inline: 14px; }
+    .settings-home-title { font-size: 20px; }
+    .settings-category-row { min-height: 68px; padding-inline: 8px; gap: 12px; }
+    .settings-category-icon { width: 36px; height: 36px; flex-basis: 36px; border-radius: 10px; }
+    .settings-category-copy strong { font-size: 14px; }
+    .settings-category-copy small { font-size: 12px; }
+    .settings-subpage-header { margin-bottom: 22px; }
+    .settings-subpage-header h1 { font-size: 20px; }
+    .about-page { gap: 18px; }
     .time-format-options { width: 100%; }
-    .time-format-option { flex: 1 1 0; min-width: 0; }
+    .time-format-option { padding-inline: 10px; }
     .appearance-row { gap: 12px; padding: 12px; }
     .appearance-mode-row { display: block; }
     .appearance-mode-row .appearance-label { margin-bottom: 10px; }

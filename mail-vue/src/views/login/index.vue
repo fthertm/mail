@@ -180,7 +180,7 @@
 <script setup>
 import router from "@/router";
 import {useRoute} from "vue-router";
-import {computed, nextTick, reactive, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
 import {websiteConfig} from "@/request/setting.js";
@@ -196,6 +196,9 @@ import {loginUserInfo} from "@/request/my.js";
 import {permsToRouter} from "@/perm/perm.js";
 import {useI18n} from "vue-i18n";
 import {githubOauthComplete, googleOauthComplete, oauthBindUser, oauthComplete} from "@/request/ouath.js";
+import {getDeviceId, isInstalledPwa} from '@/utils/device-id.js';
+import {loadMailDensity} from '@/utils/mail-density.js';
+import {adoptAuthenticatedUser, clearUserScopedState} from '@/utils/session-state.js';
 import brandMark from '@/icons/svg/brand-mark.svg'
 // Imported (not a /public URL) so Vite emits a content-hashed file: replacing the
 // artwork produces a new URL and therefore bypasses any cached copy. Public
@@ -222,6 +225,25 @@ const isDark = computed(() => {
 
   return false
 })
+
+const LOGIN_STATUS_BAR_COLORS = {
+  light: '#dbeafe',
+  dark: '#10243f',
+}
+
+function updateLoginStatusBar() {
+  const metaTag = document.getElementById('theme-color-meta')
+    || document.querySelector('meta[name="theme-color"]')
+  metaTag?.setAttribute('content', isDark.value
+    ? LOGIN_STATUS_BAR_COLORS.dark
+    : LOGIN_STATUS_BAR_COLORS.light)
+
+  const statusBarMeta = document.getElementById('apple-status-bar-meta')
+  statusBarMeta?.setAttribute('content', isDark.value ? 'black' : 'default')
+}
+
+watch(isDark, updateLoginStatusBar, { immediate: true })
+onBeforeUnmount(() => uiStore.applyTheme())
 
 const loginLoading = ref(false)
 const bindLoading = ref(false)
@@ -361,7 +383,7 @@ const getEmailName = (email) => {
 
 function oauthLogin(provider) {
   const apiBase = (import.meta.env.VITE_BASE_URL || '/api').replace(/\/$/, '')
-  window.location.assign(`${apiBase}/oauth/${provider}/login`)
+  window.location.assign(`${apiBase}/oauth/${provider}/login?device_id=${encodeURIComponent(getDeviceId())}&pwa=${isInstalledPwa()}`)
 }
 
 oauthGetUser();
@@ -410,7 +432,7 @@ async function oauthGetUser() {
 
 function startGithubLogin() {
   const apiBase = (import.meta.env.VITE_BASE_URL || '/api').replace(/\/$/, '')
-  window.location.assign(`${apiBase}/oauth/github/login`)
+  window.location.assign(`${apiBase}/oauth/github/login?device_id=${encodeURIComponent(getDeviceId())}&pwa=${isInstalledPwa()}`)
 }
 
 function bind() {
@@ -515,12 +537,12 @@ const submit = () => {
 }
 
 async function saveToken(token) {
+  clearUserScopedState()
   localStorage.setItem('token', token)
   refreshWebsiteConfig()
   const user = await loginUserInfo();
-  accountStore.currentAccountId = user.account.accountId;
-  accountStore.currentAccount = user.account;
-  userStore.user = user;
+  await loadMailDensity(settingStore)
+  adoptAuthenticatedUser(user);
   const routers = permsToRouter(user.permKeys);
   routers.forEach(routerData => {
     router.addRoute('layout', routerData);

@@ -41,43 +41,10 @@
           <span class="nav-icon"><AppIcon name="nova-sidebar-trash" :size="18" inline /></span>
           <span class="menu-name">{{$t('trash')}}</span>
         </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'setting'})" index="setting"
+        <el-menu-item v-if="showDesktopSettings" class="nova-navigation-button" @click="router.push({name: 'setting'})" index="setting"
                       :class="route.meta.name === 'setting' ? 'choose-item' : ''">
           <span class="nav-icon"><AppIcon name="nova-sidebar-settings" :size="18" inline /></span>
           <span class="menu-name">{{$t('settings')}}</span>
-        </el-menu-item>
-        <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
-          <div>{{$t('manage')}}</div>
-        </div>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'analysis'})" index="analysis" v-perm="'analysis:query'"
-                      :class="route.meta.name === 'analysis' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-analytics" :size="18" inline /></span>
-          <span class="menu-name">{{$t('analytics')}}</span>
-        </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'user'})" index="setting" v-perm="'user:query'"
-                      :class="route.meta.name === 'user' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-users" :size="18" inline /></span>
-          <span class="menu-name">{{$t('allUsers')}}</span>
-        </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'all-email'})" index="all-email" v-perm="'all-email:query'"
-                      :class="route.meta.name === 'all-email' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-mail" :size="18" inline /></span>
-          <span class="menu-name">{{$t('allMail')}}</span>
-        </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'role'})" index="setting" v-perm="'role:query'"
-                      :class="route.meta.name === 'role' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-role" :size="18" inline /></span>
-          <span class="menu-name">{{$t('permissions')}}</span>
-        </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'reg-key'})" index="reg-key" v-perm="'reg-key:query'"
-                      :class="route.meta.name === 'reg-key' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-invite" :size="18" inline /></span>
-          <span class="menu-name">{{$t('inviteCode')}}</span>
-        </el-menu-item>
-        <el-menu-item class="nova-navigation-button" @click="router.push({name: 'sys-setting'})" index="sys-setting" v-perm="'setting:query'"
-                      :class="route.meta.name === 'sys-setting' ? 'choose-item' : ''">
-          <span class="nav-icon"><AppIcon name="nova-sidebar-system-settings" :size="18" inline /></span>
-          <span class="menu-name">{{$t('SystemSettings')}}</span>
         </el-menu-item>
       </el-menu>
     </div>
@@ -147,12 +114,14 @@ import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
 import {computed} from "vue";
+import {useMediaQuery} from '@vueuse/core'
 import packageInfo from '../../../package.json'
 
 const settingStore = useSettingStore();
 const route = useRoute();
 const uiStore = useUiStore();
 const userStore = useUserStore();
+const showDesktopSettings = useMediaQuery('(min-width: 768px)')
 
 const sendQuotaType = computed(
   () => userStore.user?.role?.sendType || ''
@@ -253,14 +222,6 @@ const openCompose = () => uiStore.writerRef?.open()
   flex-shrink: 0;
 }
 
-
-.manage-title {
-  margin-top: 8px;
-  padding: 0 22px;
-  color: var(--secondary-text-color);
-  font-size: 12px;
-  line-height: 28px;
-}
 
 :deep(.nova-sidebar-nav .el-menu-item) {
   margin: 1px 10px !important;

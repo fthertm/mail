@@ -8,6 +8,7 @@ import permService from '../service/perm-service';
 import { t } from '../i18n/i18n'
 import app from '../hono/hono';
 import emailUtils from '../utils/email-utils';
+import sessionService from '../service/session-service';
 
 const publicRoutes = new Set([
 	'POST /login',
@@ -84,6 +85,8 @@ const requirePerms = [
 	'/regKey/history'
 ];
 
+const adminApiPrefixes = ['/analysis', '/allEmail', '/user', '/role', '/regKey', '/setting'];
+
 // Maps a stored permission key to the API routes it unlocks. The name now
 // matches `perm.perm_key` and `permKeyToPaths` below; it previously did not.
 const permKey = {
@@ -141,6 +144,18 @@ app.use('*', async (c, next) => {
 		throw new BizError(t('authExpired'), 401);
 	}
 
+	const session = await sessionService.findByToken(c, token);
+	if (!session || session.user_id !== userId) {
+		throw new BizError(t('authExpired'), 401);
+	}
+	await sessionService.touch(c, session);
+
+	const isAdminApi = adminApiPrefixes.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
+	const isAdmin = authInfo.user?.type === 0 || emailUtils.sameEmail(authInfo.user?.email, c.env.admin);
+	if (isAdminApi && !isAdmin) {
+		throw new BizError(t('unauthorized'), 403);
+	}
+
 	const permIndex = requirePerms.findIndex(item => {
 		return path.startsWith(item);
 	});
@@ -171,6 +186,7 @@ app.use('*', async (c, next) => {
 	}
 
 	c.set('user',authInfo.user)
+	c.set('session', session)
 
 	return await next();
 });

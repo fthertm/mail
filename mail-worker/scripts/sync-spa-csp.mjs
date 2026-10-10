@@ -29,12 +29,16 @@ export const CSP_MODULE = resolve(HERE, '..', 'src', 'security', 'spa-csp.js');
 
 // The same shape the browser and the unit test use: the body of every inline
 // <script>. External <script src> tags have an empty body and are ignored.
-const INLINE_SCRIPT_RE = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi;
-const HASH_LITERAL_RE = /'sha256-[A-Za-z0-9+/]+={0,2}'/g;
+const INLINE_SCRIPT_RE = /<script((?:\s[^>]*)?)>([\s\S]*?)<\/script>/gi;
+// Veri blokları (ör. JSON-LD) çalıştırılmaz, CSP script-src'den etkilenmez, hash'e girmez.
+const DATA_BLOCK_RE = /type\s*=\s*["']application\/ld\+json["']/i;
 
 /** Base64 sha256 of the single inline first-paint script in `html`. */
 export function inlineScriptHash(html) {
-	const inline = [...html.matchAll(INLINE_SCRIPT_RE)].map(match => match[1]).filter(Boolean);
+	const inline = [...html.matchAll(INLINE_SCRIPT_RE)]
+	.filter(match => !DATA_BLOCK_RE.test(match[1]))
+	.map(match => match[2])
+	.filter(Boolean);
 	if (inline.length !== 1) {
 		throw new Error(`expected exactly one inline <script> in index.html, found ${inline.length}`);
 	}

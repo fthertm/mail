@@ -1,0 +1,49 @@
+/* Mail reader transition only. No geometry, scale, shared-element, or layer. */
+
+.mail-reader.nova-mail-reader-opening,
+.mail-reader.nova-mail-reader-closing,
+html.nova-mail-reader-opening .mail-reader,
+html.nova-mail-reader-closing .mail-reader {
+  will-change: opacity, transform;
+}
+
+.mail-reader.nova-mail-reader-opening,
+html.nova-mail-reader-opening .mail-reader {
+  animation: nova-mail-reader-in 160ms ease-out both;
+}
+
+.mail-reader.nova-mail-reader-closing,
+html.nova-mail-reader-closing .mail-reader {
+  animation: nova-mail-reader-out 140ms ease-out both;
+}
+
+/* The mobile action bar is teleported to body, so it follows the same state. */
+html.nova-mail-reader-opening .reader-bottom-actions {
+  animation: nova-mail-reader-in 160ms ease-out both;
+}
+
+html.nova-mail-reader-closing .reader-bottom-actions {
+  animation: nova-mail-reader-out 140ms ease-out both;
+}
+
+@keyframes nova-mail-reader-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes nova-mail-reader-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mail-reader.nova-mail-reader-opening,
+  .mail-reader.nova-mail-reader-closing,
+  html.nova-mail-reader-opening .mail-reader,
+  html.nova-mail-reader-closing .mail-reader,
+  html.nova-mail-reader-opening .reader-bottom-actions,
+  html.nova-mail-reader-closing .reader-bottom-actions {
+    animation: none;
+    transform: none;
+  }
+}

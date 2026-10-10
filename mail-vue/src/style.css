@@ -1,0 +1,837 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-width: thin;
+    scrollbar-color: var(--dark-border) transparent;
+}
+
+:root {
+    /* UI stays neutral and highly scannable. No web font is fetched: each
+       entry is a locally available system face or an optional local install. */
+    --nova-font-ui: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    /* A deliberately restrained reading face. It is used only for the brand
+       and mail prose; controls, metadata and application chrome remain sans. */
+    --nova-font-reading: "Source Han Serif SC VF", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+    --nova-font-code: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --nova-font-family: var(--nova-font-ui);
+    --el-font-family: var(--nova-font-ui);
+    /* Base palette tokens. The UI store updates these as one palette, then the
+       rest of the application continues consuming its established aliases. */
+    --nova-accent: #0a84ff;
+    --nova-background: #f5f6f8;
+    --nova-foreground: #1f2937;
+    --nova-surface: #ffffff;
+    --nova-border: #e5e7eb;
+    /* Semantic hierarchy. The five `--nova-*` palette inputs are the only
+       user-editable colours; these variables are the stable UI contract. */
+    --nm-bg: var(--nova-background);
+    --nm-surface: #f7f8fa;
+    --nm-surface-elevated: var(--nova-surface);
+    --nm-text-primary: var(--nova-foreground);
+    --nm-text-secondary: #5f6673;
+    --nm-text-muted: #7b8491;
+    --nm-border: var(--nova-border);
+    --nm-border-strong: #cbd1d9;
+    --nm-accent: var(--nova-accent);
+    --nm-accent-hover: #086fd9;
+    --nm-accent-active: #075eb8;
+    --nm-accent-subtle: #e2efff;
+    --nm-hover: #f3f7fc;
+    --nm-selected: var(--nm-accent-subtle);
+    /* Destructive actions have their own semantic scale. They intentionally
+       do not inherit the user-configurable accent palette: deleting an
+       account must remain unmistakable in every Mail theme. */
+    --nm-danger: #c73c3c;
+    --nm-danger-hover: #ad3030;
+    --nm-danger-active: #922727;
+    --nm-danger-foreground: #ffffff;
+    --nm-danger-surface: #fbeded;
+    --nm-danger-border: #df9494;
+    --nova-text-primary: var(--nm-text-primary);
+    --nova-text-secondary: var(--nm-text-secondary);
+    --nova-text-muted: var(--nm-text-muted);
+    --nova-star-idle: var(--nova-text-muted);
+    --nova-star-active: var(--nova-accent);
+    --el-text-color-primary: var(--nova-text-primary);
+    --el-text-color-regular: var(--nova-text-secondary);
+    --el-text-color-secondary: var(--nova-text-muted);
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    /* Fill the dynamic viewport on mobile (no gap under the browser chrome)
+       and stop the rubber-band overscroll that reveals the page behind it. */
+    height: 100dvh;
+    overscroll-behavior: none;
+    /* Last-resort guard: the shell is a fixed one-column layout, so a phone must
+       never be able to pan the document sideways. */
+    overflow-x: hidden;
+}
+
+#app {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    overflow-x: hidden;
+}
+
+:deep(.el-input__inner:focus) {
+    background-color: transparent !important;
+    border-color: #dcdfe6 !important;
+}
+
+.el-table thead th {
+    font-weight: 600 !important;
+}
+
+body {
+    font-family: var(--nova-font-ui);
+    line-height: 1.55;
+    color: var(--nova-text-primary);
+    font-size: 14px;
+}
+
+html, body {
+    background: var(--el-bg-color);
+}
+
+ul, ol {
+    list-style: none;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+button, input, select, textarea {
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+    border: none;
+    background: none;
+}
+
+*:focus {
+    outline: none;
+}
+
+.el-message {
+    white-space: nowrap !important;
+}
+
+.message-bottom {
+    top: auto !important;
+    bottom: 20px !important;
+
+    .el-icon {
+        display: none !important;
+    }
+}
+
+.el-input-group__append, .el-input-group__prepend {
+    color: var(--el-text-color-primary) !important;
+}
+
+.tox .tox-dialog__iframe.tox-dialog__iframe--opaque {
+    background-color: var(--el-bg-color) !important;
+}
+
+.tox .tox-dialog--width-lg {
+    height: 850px !important;
+    @media (max-width: 1024px) {
+        height: calc(100% - 40px) !important;
+    }
+}
+
+.tox .tox-dialog__body-content {
+    overflow: initial !important;
+    max-height: min(850px, calc(100vh - 110px)) !important;
+    @media (max-width: 1024px) {
+        box-sizing: initial !important;
+        max-height: min(850px, calc(100% - 40px)) !important;
+    }
+}
+
+.tox-dialog__body-content {
+    height: auto !important;
+    flex-basis: auto !important;
+}
+
+.tox .tox-collection--grid .tox-collection__group {
+    max-height: 220px !important;
+}
+
+:root {
+    --el-color-primary: var(--nova-accent);
+    --el-color-primary-dark-2: #0067d6;
+    --el-color-primary-light-3: #5aaeff;
+    --el-color-primary-light-5: #8bc5ff;
+    --el-color-primary-light-7: #b9ddff;
+    --el-color-primary-light-9: #edf7ff;
+
+    --extra-light-fill: var(--nm-surface);
+    --settings-page-background: var(--nm-bg);
+    --light-ill: #f2f4f7;
+    --light-border: var(--nova-border);
+    --header-actions-border: inset 0 -1px 0 0 var(--el-border-color-lighter);
+    --aside-backgound: var(--nm-surface);
+    --aside-menu-active-background: var(--nm-selected);
+    --loadding-background: rgba(255, 255, 255, 0.8);
+    --dark-border: #d1d5db;
+    --base-fill: #eef1f5;
+    --regular-text-color: var(--nova-text-secondary);
+    --light-border-color: #e4e7ec;
+    --aside-right-border: 1px 0 0 rgba(17, 24, 39, .08);
+    --choose-account-background: var(--el-color-primary-light-8);
+    --email-scroll-content-color: rgba(25, 41, 59, 0.4);
+    --email-hover-background: #f2f7ff;
+    --email-right-click-background: #FDF6EC;
+    --login-border: none;
+    --form-desc-color: #71717a;
+    --login-switch-color: #006be6;
+    --scrollbar-track-color: #A8ABB2;
+    --base-border-color: #DCDFE6;
+    --secondary-text-color: var(--nova-text-muted);
+    --loading-hide-transition: all 200ms;
+    --vt-x: 50%;
+    --vt-y: 50%;
+    --vt-duration: 520ms;
+    --vt-easing: ease-out;
+    --nova-surface-muted: var(--nm-surface);
+    /* Single source of truth for the phone chrome. The mobile app bar, the
+       status-bar / `safe-area-inset-top` strip behind it and the PWA
+       `theme-color` meta all resolve to this one token, so they can never
+       drift into the two-tone band the header used to show. It aliases
+       `--nova-surface` deliberately: the dark header stays the designed dark
+       grey (#17191d) instead of being forced to pure black. */
+    --nova-mobile-header-bg: var(--nova-surface);
+    --nova-divider: #e8ebef;
+    /* Phone search field: a step above the page without reading as a block. */
+    --nova-search-bg: #f2f2f7;
+    --nova-search-border: color-mix(in srgb, var(--nova-divider) 72%, transparent);
+    /* Structure-only divider: list rows, filter and nav hairlines. */
+    --nova-divider-soft: color-mix(in srgb, var(--nova-divider) 60%, transparent);
+    /* Quoted-reply hierarchy line (Gmail style). */
+    --nova-quote-line: #c7cdd4;
+    --nova-hover: var(--nm-hover);
+    --nova-selected: var(--nm-selected);
+    --nova-shadow: 0 10px 32px rgba(23, 35, 52, .08);
+    --nova-overlay: rgba(0,0,0,.45);
+    --nova-ui-icon-filter: none;
+    --nova-ui-icon-filter-hover: none;
+    --nova-motion-fast: 140ms;
+    --nova-motion-base: 180ms;
+    --nova-motion-slow: 240ms;
+    --nova-motion-ease: cubic-bezier(.2, .8, .2, 1);
+    --nova-radius-sm: 8px;
+    --nova-radius-md: 12px;
+    --nova-radius-lg: 16px;
+    --nova-danger: var(--nm-danger);
+    --nova-warning: #d99823;
+    --nova-success: #2f9e6f;
+    /* Shared desktop control language. Components consume these rather than
+       introducing their own near-identical button measurements. */
+    --nova-button-radius: 9px;
+    --nova-button-primary-radius: 10px;
+    --nova-button-height: 34px;
+    --nova-icon-button-size: 34px;
+    --nova-button-hover: var(--nova-hover);
+    --nova-button-active: var(--nm-accent-subtle);
+    --nova-button-focus-ring: 0 0 0 2px color-mix(in srgb, var(--nm-accent) 42%, transparent);
+    --nova-button-disabled-opacity: .48;
+}
+
+.dark {
+    --nova-accent: #0a84ff;
+    --nova-background: #1c1d20;
+    --nova-foreground: #e5e7eb;
+    --nova-surface: #17191d;
+    --nova-border: #383a3f;
+    --nm-bg: var(--nova-background);
+    --nm-surface: #1b1c1f;
+    --nm-surface-elevated: var(--nova-surface);
+    --nm-text-primary: var(--nova-foreground);
+    --nm-text-secondary: #a7adb7;
+    --nm-text-muted: #7e8590;
+    --nm-border: var(--nova-border);
+    --nm-border-strong: #5a5c61;
+    --nm-accent: var(--nova-accent);
+    --nm-accent-hover: #238fff;
+    --nm-accent-active: #3b9aff;
+    --nm-accent-subtle: #183a60;
+    --nm-hover: #202833;
+    --nm-selected: var(--nm-accent-subtle);
+    --nm-danger: #b84d47;
+    --nm-danger-hover: #a83f3a;
+    --nm-danger-active: #943531;
+    --nm-danger-foreground: #ffffff;
+    --nm-danger-surface: #3a2426;
+    --nm-danger-border: #704145;
+    --nova-text-primary: var(--nm-text-primary);
+    --nova-text-secondary: var(--nm-text-secondary);
+    --nova-text-muted: var(--nm-text-muted);
+    --nova-star-idle: var(--nova-text-secondary);
+    --nova-star-active: var(--nova-accent);
+    --el-text-color-primary: var(--nova-text-primary);
+    --el-text-color-regular: var(--nova-text-secondary);
+    --el-text-color-secondary: var(--nova-text-muted);
+    --extra-light-fill: var(--nm-surface);
+    --settings-page-background: var(--nm-bg);
+    --light-ill: #27292d;
+    --light-border: var(--nova-border);
+    --aside-backgound: var(--nm-surface);
+    --aside-menu-active-background: var(--nm-selected);
+    --header-actions-border: inset 0 -1px 0 0 var(--el-border-color-lighter);
+    --loadding-background: rgba(0, 0, 0, 0.3);
+    --dark-border: #636466;
+    --base-fill: #2b2d31;
+    --regular-text-color: var(--nova-text-secondary);
+    --light-border-color: #37393e;
+    --aside-right-border: 1px 0 0 #313338;
+    --choose-account-background: #39393A;
+    --email-scroll-content-color: rgba(255, 255, 255, 0.3);
+    --email-hover-background: #1D1E1F;
+    --email-right-click-background: var(--email-hover-background);
+    --login-border: none;
+    --form-desc-color: #8D9095;
+    --login-switch-color: rgb(102, 177, 255);
+    --scrollbar-track-color: #8D9095;
+    --base-border-color: #4C4D4F;
+    --secondary-text-color: var(--nova-text-muted);
+    --el-border-color: var(--nova-border) !important;
+    --nova-surface-muted: var(--nm-surface);
+    --nova-divider: #2c3037;
+    /* Dark search field must stay a hair above the page: a 5.5% white veil plus
+       a barely-there outline, never a bright block. */
+    --nova-search-bg: rgba(255, 255, 255, 0.055);
+    --nova-search-border: rgba(255, 255, 255, 0.07);
+    /* Dark dividers must stay quiet: same token, lower opacity. */
+    --nova-divider-soft: color-mix(in srgb, var(--nova-divider) 45%, transparent);
+    /* Quoted-reply hierarchy line (Gmail style). */
+    --nova-quote-line: #4b5563;
+    --nova-hover: var(--nm-hover);
+    --nova-selected: var(--nm-selected);
+    --nova-shadow: 0 10px 32px rgba(0, 0, 0, .22);
+    --nova-overlay: rgba(0,0,0,.25);
+    /* The UI SVGs are raster-backed assets, so they cannot inherit currentColor. */
+    --nova-ui-icon-filter: brightness(0) invert(78%);
+    --nova-ui-icon-filter-hover: brightness(0) invert(92%);
+    --nova-button-active: var(--nm-accent-subtle);
+}
+
+/* Keep the product responsive without making routine mail actions feel animated. */
+button:not(:disabled),
+.el-button:not(.is-disabled) {
+    transition: background-color var(--nova-motion-fast) var(--nova-motion-ease),
+                border-color var(--nova-motion-fast) var(--nova-motion-ease),
+                color var(--nova-motion-fast) var(--nova-motion-ease),
+                box-shadow var(--nova-motion-fast) var(--nova-motion-ease),
+                transform var(--nova-motion-fast) var(--nova-motion-ease);
+}
+
+@keyframes nova-view-in {
+    from { opacity: 0; transform: translate3d(8px, 0, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes nova-popover-in {
+    from { opacity: 0; transform: translate3d(0, -6px, 0) scale(.98); }
+    to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes nova-fade-scale-in {
+    from { opacity: 0; transform: scale(.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+    }
+}
+
+/* Button system ------------------------------------------------------------
+   Element Plus carries the mechanics; these are the single visual contract for
+   its ordinary controls and Mail's native buttons. No variant owns placement. */
+.el-button {
+    min-height: var(--nova-button-height);
+    padding: 0 13px;
+    border: 1px solid var(--nm-border);
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-text-primary);
+    background: var(--nm-surface-elevated);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+.el-button:not(.is-disabled):not(.is-text):not(.is-link):not(.el-button--primary):not(.el-button--danger):hover {
+    border-color: color-mix(in srgb, var(--nm-accent) 38%, var(--nm-border));
+    color: var(--nm-text-primary);
+    background: var(--nm-hover);
+}
+
+.el-button--primary {
+    border-color: var(--nm-accent);
+    color: #fff;
+    background: var(--nm-accent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--nm-accent) 30%, transparent);
+}
+
+.el-button--primary:not(.is-disabled):hover {
+    border-color: var(--nm-accent-hover);
+    color: #fff;
+    background: var(--nm-accent-hover);
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--nm-accent) 24%, transparent);
+}
+
+.el-button--danger,
+.nova-danger-button {
+    border-color: color-mix(in srgb, var(--nova-danger) 45%, var(--nm-border));
+    color: var(--nova-danger);
+}
+
+.el-button--danger:not(.is-disabled),
+.nova-danger-button:not(:disabled) { background: transparent; }
+.el-button--danger:not(.is-disabled):hover,
+.nova-danger-button:not(:disabled):hover {
+    border-color: var(--nova-danger);
+    color: #fff;
+    background: var(--nova-danger);
+}
+
+.el-button.is-text,
+.el-button.is-link,
+.nova-ghost-button {
+    border-color: transparent;
+    color: var(--nm-text-secondary);
+    background: transparent;
+    box-shadow: none;
+}
+
+.el-button.is-text:not(.is-disabled):hover,
+.el-button.is-link:not(.is-disabled):hover,
+.nova-ghost-button:not(:disabled):hover {
+    color: var(--nm-accent);
+    background: var(--nm-hover);
+}
+
+.el-button:active:not(.is-disabled) { transform: scale(.98); }
+.el-button:focus-visible,
+.nova-primary-button:focus-visible,
+.nova-secondary-button:focus-visible,
+.nova-ghost-button:focus-visible,
+.nova-icon-button:focus-visible { outline: none; box-shadow: var(--nova-button-focus-ring); }
+.el-button.is-disabled, .el-button:disabled { opacity: var(--nova-button-disabled-opacity); }
+
+.el-input__wrapper, .el-textarea__inner { border-radius: 10px; box-shadow: 0 0 0 1px var(--light-border) inset !important; }
+.el-dialog { border-radius: 16px; overflow: hidden; }
+.el-popper { border-radius: 12px !important; }
+
+/* Button primitives. They intentionally own geometry and state treatment,
+   while each surface keeps ownership of its placement and content. */
+.nova-primary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: var(--nova-button-primary-radius);
+    color: #fff;
+    background: var(--el-color-primary);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--el-color-primary) 28%, transparent);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.nova-danger-button { border-radius: var(--nova-button-radius); }
+
+.nova-ghost-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--nova-button-height);
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: var(--nova-button-radius);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.nova-primary-button:hover:not(:disabled) {
+    background: var(--el-color-primary-dark-2);
+    box-shadow: 0 3px 8px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
+}
+
+.nova-primary-button:active:not(:disabled) { transform: scale(.98); }
+
+.nova-icon-button {
+    appearance: none;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 var(--nova-icon-button-size);
+    width: var(--nova-icon-button-size);
+    height: var(--nova-icon-button-size);
+    min-width: var(--nova-icon-button-size);
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--nova-button-radius);
+    color: var(--el-text-color-regular);
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.nova-icon-button:hover:not(:disabled) {
+    color: var(--el-color-primary);
+    background: var(--nova-button-hover);
+}
+
+.nova-icon-button:active:not(:disabled) {
+    background: var(--nova-button-active);
+    transform: scale(.96);
+}
+
+.nova-toolbar-button {
+    border-radius: 8px;
+    color: var(--nm-text-secondary);
+}
+
+.nova-toolbar-button:hover:not(:disabled) {
+    color: var(--nm-text-primary);
+    background: var(--nm-hover);
+}
+
+.nova-toolbar-button.nova-danger-button:hover:not(:disabled) { color: #fff; background: var(--nova-danger); }
+
+/* The mail reader delete action needs a denser danger surface in dark mode.
+   It is intentionally more solid than the ordinary icon hover so it remains
+   unmistakable against every dark theme surface. */
+html.dark .nova-toolbar-button.nova-danger-button:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--nova-danger) 88%, var(--nm-surface));
+    background: color-mix(in srgb, var(--nova-danger) 88%, var(--nm-surface));
+}
+
+html.dark .nova-toolbar-button.nova-danger-button:hover:not(:disabled) .iconify {
+    color: currentColor !important;
+}
+
+.nova-mobile-icon-button {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--nm-text-secondary);
+    background: transparent;
+}
+.nova-mobile-icon-button:hover:not(:disabled),
+.nova-mobile-icon-button:active:not(:disabled) { color: var(--nm-accent); background: var(--nm-hover); }
+
+.nova-primary-button:disabled,
+.nova-icon-button:disabled,
+.nova-secondary-button:disabled,
+.nova-ghost-button:disabled {
+    cursor: not-allowed;
+    opacity: var(--nova-button-disabled-opacity);
+}
+
+.nova-secondary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--light-border);
+    border-radius: var(--nova-button-radius);
+    color: var(--el-text-color-primary);
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.nova-secondary-button:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--el-color-primary) 45%, var(--light-border));
+    background: var(--nova-button-hover);
+}
+
+.nova-secondary-button:active:not(:disabled) {
+    background: var(--nova-button-active);
+    transform: scale(.98);
+}
+
+/* Navigation and segmented controls remain in their existing layout slots;
+   only their interactive treatment is normalised. */
+.nova-navigation-button,
+.nova-segmented-button {
+    border: 1px solid transparent;
+    border-radius: var(--nova-button-radius);
+    color: var(--nm-text-secondary);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+}
+.nova-navigation-button:hover:not(:disabled),
+.nova-segmented-button:hover:not(:disabled) { color: var(--nm-text-primary); background: var(--nm-hover); }
+.nova-navigation-button.is-active,
+.nova-segmented-button.is-active { color: var(--nm-accent); background: var(--nm-accent-subtle); }
+
+html.dark .nova-icon-button .iconify:not(.nova-star-icon) {
+    color: var(--el-text-color-regular) !important;
+    opacity: 1 !important;
+}
+
+html.dark .nova-icon-button:hover .iconify:not(.nova-star-icon) {
+    color: var(--el-color-primary) !important;
+}
+
+.el-input {
+    --el-input-text-color: var(--el-text-color-primary) !important;
+}
+
+/* 视图过渡，基于径向剪裁 */
+html.dark,
+html:not(.dark) {
+    view-transition-name: root;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+/* 层级控制，确保对应方向动画在上层可见 */
+html[data-theme-to="dark"]::view-transition-new(root) { z-index: 2; }
+html[data-theme-to="dark"]::view-transition-old(root) { z-index: 1; }
+html[data-theme-to="light"]::view-transition-old(root) { z-index: 2; }
+html[data-theme-to="light"]::view-transition-new(root) { z-index: 1; }
+
+/* 切到暗色：新视图从点击点向外扩散 */
+html[data-theme-to="dark"]::view-transition-new(root) {
+    clip-path: circle(0px at var(--vt-x) var(--vt-y));
+    animation: vt-radial-in var(--vt-duration) var(--vt-easing) forwards;
+}
+
+/* 切到浅色：旧视图向点击点收缩 */
+html[data-theme-to="light"]::view-transition-old(root) {
+    clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y));
+    animation: vt-radial-out var(--vt-duration) var(--vt-easing) forwards;
+}
+
+@keyframes vt-radial-in {
+    from { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
+    to   { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
+}
+
+@keyframes vt-radial-out {
+    from { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
+    to   { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
+}
+
+/* Mobile dark-mode icon normalization */
+@media (max-width: 767px) {
+  /* Keep every native scroll region touch-scrollable while removing only its
+     chrome. This lives at the app boundary so mailbox lists, readers, nested
+     settings panes and horizontal scrollers behave consistently on phones. */
+  *,
+  *::before,
+  *::after {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Element Plus renders its own scrollbar bars instead of native chrome. */
+  .el-scrollbar__bar {
+    display: none !important;
+  }
+
+  /* Phone document chrome. The app bar paints its own `env(safe-area-inset-top)`
+     padding with the same token, but html/body must match too: otherwise the
+     Element Plus page colour (#141414 in dark) shows as a near-black band above
+     the dark-grey header on Android and in installed PWAs. */
+  html,
+  body {
+    background: var(--nova-mobile-header-bg);
+  }
+
+  /* Light-mode counterparts of the phone ink scale. These previously existed
+     only under html.dark, so in light mode `var(--mobile-secondary/tertiary)`
+     was invalid and Sender, Subject and Preview all inherited the same colour —
+     which is why the list had no visual hierarchy. */
+  :root {
+    --mobile-primary: #1c1c1e;
+    --mobile-secondary: #6b7280;
+    --mobile-tertiary: #9aa1ab;
+  }
+
+  html.dark {
+    --mobile-primary: #f2f2f7;
+    --mobile-secondary: #aeaeb2;
+    --mobile-tertiary: #8e8e93;
+  }
+
+  html.dark .mobile-nav button {
+    color: var(--mobile-secondary);
+  }
+
+  html.dark .mobile-nav button.active {
+    color: var(--el-color-primary);
+  }
+
+  html.dark .mobile-nav button:not(.active) .app-icon,
+  html.dark .mobile-search .app-icon,
+  html.dark .mobile-tool-button .app-icon,
+  html.dark .mobile-row-star .app-icon {
+    filter: brightness(0) invert(1) !important;
+    opacity: .72;
+  }
+
+  html.dark .mobile-nav button.active .app-icon {
+    opacity: 1;
+  }
+}
+
+/* Mobile Inbox has its own search field. */
+@media (max-width: 767px) {
+  .el-header .search-shell,
+  .header .search-shell {
+    display: none !important;
+  }
+
+  /* Element Plus overlays ship desktop widths (dialog 50%, message box 420px,
+     change-password 340px). Cap them to the phone viewport so an opened overlay
+     can never exceed the screen. */
+  .el-dialog {
+    max-width: calc(100vw - 32px);
+  }
+
+  .el-message-box {
+    width: min(420px, calc(100vw - 32px)) !important;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+
+/* ===== DEBUG ICON VISIBILITY ===== */
+
+html.dark .app-icon,
+html.dark .iconify,
+html.dark svg {
+    filter: none !important;
+    opacity: 1 !important;
+}
+
+
+html.dark .app-icon:not(.preserve-color) {
+    filter: none !important;
+}
+
+
+html.dark .iconify {
+    color: #ffffff !important;
+}
+
+
+
+
+/* Mail unified dark icon visibility */
+
+html.dark .app-icon:not(.preserve-color) {
+    filter: brightness(0) invert(82%) !important;
+    opacity: .9 !important;
+}
+
+
+html.dark .iconify {
+    color: #D1D1D6 !important;
+    opacity: .9 !important;
+}
+
+
+/* Shared star system. The global dark Iconify fallback is intentionally
+ * overridden here so every star control has the same idle and active state. */
+.nova-star-icon {
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 18px;
+    color: var(--nova-star-idle);
+    opacity: 1;
+}
+
+.nova-star-icon.is-active {
+    color: var(--nova-star-active);
+}
+
+html.dark .nova-star-icon {
+    filter: none !important;
+    color: var(--nova-star-idle) !important;
+    opacity: 1 !important;
+}
+
+html.dark .nova-star-icon.is-active {
+    color: var(--nova-star-active) !important;
+}
+
+
+/* Undo snackbar for the mobile swipe actions.
+ *
+ * Element Plus teleports the message outside the component tree, so the scoped
+ * styles in `components/email-scroll` cannot reach it; the layout of the action
+ * itself has to live here. Colours come from the shared theme tokens so the
+ * snackbar follows light/dark like every other surface. */
+
+.el-message.nova-undo-message {
+    border-color: var(--nova-divider);
+
+    background: var(--nova-surface);
+
+    color: var(--nova-primary, var(--el-text-color-primary));
+}
+
+.nova-undo-snackbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.nova-undo-text {
+    min-width: 0;
+}
+
+.nova-undo-action {
+    flex: 0 0 auto;
+
+    padding: 2px 4px;
+
+    border: 0;
+
+    background: none;
+
+    color: var(--el-color-primary);
+
+    font: inherit;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.nova-undo-action:hover,
+.nova-undo-action:focus-visible {
+    text-decoration: underline;
+}

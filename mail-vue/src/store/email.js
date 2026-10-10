@@ -1,0 +1,199 @@
+import { defineStore } from 'pinia'
+import { EmailUnreadEnum } from '@/enums/email-enum.js'
+
+export const useEmailStore = defineStore('email', {
+    state: () => ({
+        deleteIds: 0,
+        starScroll: null,
+        emailScroll: null,
+        draftScroll: null,
+        cancelStarEmailId: 0,
+        addStarEmailId: 0,
+        contentData: {
+            email: null,
+            delType: null,
+            showStar: true,
+            showReply: true,
+            showUnread: false
+        },
+        sendScroll: null,
+        // The Archive view's list ref, so marking mail read reaches whichever
+        // folder is open (see `markListRead`).
+        archiveScroll: null,
+        trashScroll: null,
+        detailMap: {},
+        searchKeyword: '',
+        // Client-side query behind the phone Inbox search field. It lives in the
+        // store so the field can render inside the mobile header while
+        // email-scroll keeps filtering the loaded list. Not persisted.
+        mobileSearch: '',
+        // Replies/forwards sent this session, shown in the conversation thread
+        // immediately without waiting for a list refresh. Not persisted.
+        threadMessages: [],
+        // Highest email id already announced by a notification sound. Shared by
+        // the Inbox poll, the reader poll and the global watcher so the same
+        // mail never rings twice (e.g. right after switching route). Session
+        // only, never persisted.
+        notifyCursor: 0,
+        mailboxEpoch: 0,
+    }),
+    actions: {
+        clearMailboxContent() {
+            this.mailboxEpoch += 1
+            this.contentData = { email: null, delType: null, showStar: true, showReply: true, showUnread: false }
+            this.detailMap = {}
+            this.threadMessages = []
+            this.searchKeyword = ''
+            this.mobileSearch = ''
+            for (const scroll of [this.emailScroll, this.starScroll, this.sendScroll, this.archiveScroll, this.trashScroll]) {
+                if (scroll?.emailList) scroll.emailList.length = 0
+            }
+        },
+        clearStarForEmailIds(emailIds) {
+            const ids = new Set((Array.isArray(emailIds) ? emailIds : [emailIds]).map(Number))
+            if (!ids.size) return
+
+            const scrolls = [this.emailScroll, this.starScroll, this.sendScroll, this.archiveScroll, this.trashScroll]
+            for (const scroll of scrolls) {
+                const list = scroll?.emailList
+                if (!list?.length) continue
+                for (const item of list) {
+                    if (ids.has(Number(item.emailId))) item.isStar = 0
+                }
+            }
+
+            for (const id of ids) {
+                if (this.detailMap[id]) this.detailMap[id].isStar = 0
+                if (Number(this.contentData.email?.emailId) === id) {
+                    this.contentData.email.isStar = 0
+                }
+            }
+        },
+        /**
+         * Drop messages that left the current mailbox (trashed, restored,
+         * archived or permanently deleted) from every in-memory cache.
+         *
+         * `detailMap` is the pool the reader assembles conversations from, so a
+         * stale body left behind here is exactly what lets a deleted message
+         * reappear when a later message with the same subject is opened. The
+         * server also excludes hidden rows; this keeps the client from ever
+         * resurfacing one it already holds.
+         */
+        removeEmails(emailIds) {
+            const ids = new Set((Array.isArray(emailIds) ? emailIds : [emailIds]).map(Number).filter(Boolean))
+            if (!ids.size) return
+            for (const id of ids) delete this.detailMap[id]
+            if (ids.has(Number(this.contentData.email?.emailId))) {
+                this.contentData.email = null
+            }
+            this.threadMessages = this.threadMessages.filter(item => !ids.has(Number(item.emailId)))
+        },
+        fetchList(request) {
+            const epoch = this.mailboxEpoch
+            return request(0).then(data => {
+                if (epoch !== this.mailboxEpoch) return Array.isArray(data) ? [] : { ...data, list: [], total: 0 }
+                request(1).then(fullData => {
+                    if (epoch !== this.mailboxEpoch) return
+                    const list = Array.isArray(fullData) ? fullData : fullData?.list
+                    this.applyFullList(list)
+                }).catch(e => {
+                    console.error(e)
+                })
+                return data
+            })
+        },
+        applyFullList(list) {
+            if (!list?.length) return
+            const currentId = this.contentData.email?.emailId
+            for (const item of list) {
+                if (!item?.emailId) continue
+                if (!item.attList) item.attList = []
+                // 完整列表可能早于「标已读」返回，避免把本地已读状态盖回未读
+                const prev = this.detailMap[item.emailId]
+                const keepRead = prev?.unread === EmailUnreadEnum.READ
+                    || (currentId === item.emailId && this.contentData.email?.unread === EmailUnreadEnum.READ)
+                if (keepRead) {
+                    item.unread = EmailUnreadEnum.READ
+                }
+                // Preserve the object the reader is already rendering. The
+                // list's background full fetch commonly completes just after
+                // navigation; replacing this object makes every reader
+                // consumer observe a new root value at once and can recreate
+                // expensive child DOM (notably the HTML frame).
+                const selected = currentId === item.emailId ? this.contentData.email : null
+                const target = selected || prev || item
+                if (target !== item) Object.assign(target, item)
+                this.detailMap[item.emailId] = target
+                if (currentId && item.emailId === currentId) {
+                    this.contentData.email = target
+                }
+            }
+        },
+        toContentEmail(email) {
+            const id = email?.emailId
+            if (id && this.detailMap[id]) {
+                return this.detailMap[id]
+            }
+            return {
+                ...email,
+                emailId: id || 0,
+                content: '',
+                text: '',
+                attList: [],
+                recipient: email?.recipient || '[]',
+            }
+        },
+        markListRead(emailId) {
+            const scrolls = [this.emailScroll, this.starScroll, this.sendScroll, this.archiveScroll, this.trashScroll]
+            for (const scroll of scrolls) {
+                const list = scroll?.emailList
+                if (!list?.length) continue
+                const item = list.find(e => e.emailId === emailId)
+                if (item) item.unread = EmailUnreadEnum.READ
+            }
+        },
+        /**
+         * Merge a freshly fetched full email row (with `content`) into the
+         * store so the reader renders its body.
+         */
+        mergeFullEmail(row) {
+            if (!row?.emailId) return
+
+            const id = Number(row.emailId)
+            const selected = Number(this.contentData.email?.emailId) === id
+                ? this.contentData.email
+                : null
+            const existing = this.detailMap[id]
+            const target = selected || existing || row
+
+            if (target !== row) Object.assign(target, row)
+            this.detailMap[id] = target
+
+            if (selected) this.contentData.email = target
+        },
+        /**
+         * Show a freshly sent reply/forward inside its conversation thread
+         * straight away, instead of waiting for the list to be refetched.
+         * Expects the email row returned by `POST /email/send`.
+         */
+        appendThreadMessage(email) {
+            if (!email) return
+
+            const emailId = Number(email.emailId) || 0
+            if (emailId && this.threadMessages.some(item => Number(item.emailId) === emailId)) {
+                return
+            }
+
+            this.threadMessages.push({
+                ...email,
+                emailId,
+                attList: email.attList || [],
+                local: true,
+            })
+
+            if (this.threadMessages.length > 50) {
+                this.threadMessages.splice(0, this.threadMessages.length - 50)
+            }
+        },
+    },
+})

@@ -1,0 +1,37 @@
+{
+	"name": "mail-worker",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "wrangler dev --config wrangler-dev.toml",
+		"test": "pnpm run test:unit && pnpm run test:integration",
+		"test:unit": "vitest run --config vitest.unit.config.js",
+		"test:integration": "vitest run --config vitest.integration.config.js",
+		"csp:sync": "node scripts/sync-spa-csp.mjs",
+		"csp:check": "node scripts/sync-spa-csp.mjs --check",
+		"deploy": "wrangler deploy",
+		"deploy:test": "wrangler deploy --config wrangler-test.toml",
+		"start": "wrangler dev",
+		"threads:rebuild": "node scripts/rebuild-threads.mjs"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.9.14",
+		"vitest": "~3.2.7",
+		"wrangler": "^4.147.0"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "^3.882.0",
+		"@cloudflare/vite-plugin": "1.62.5",
+		"dayjs": "^1.11.13",
+		"drizzle-orm": "^0.45.3",
+		"hono": "4.13.7",
+		"i18next": "^25.3.2",
+		"linkedom": "^0.18.10",
+		"postal-mime": "^2.4.3",
+		"resend": "^6.4.1",
+		"tldts": "7.4.13",
+		"ua-parser-js": "^2.0.3",
+		"uuid": "^11.1.0"
+	}
+}

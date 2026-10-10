@@ -1,0 +1,854 @@
+name: 🚀 Deploy Mail to Cloudflare Workers
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "mail-worker/**"
+      - "mail-vue/**"
+      # The workspace root now owns the single lockfile, the shared scripts and
+      # this workflow itself. A dependency bump or a CI edit must redeploy, and
+      # must be exercised by CI — a workflow-only change used to match none of
+      # the patterns above, so it never ran and never failed either.
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+jobs:
+  # Gate for the release. `pnpm test` runs both workspace suites — the frontend
+  # (vitest + jsdom) and the Worker's unit + integration tests — and the deploy
+  # job `needs` this one, so a failing test blocks the deployment instead of
+  # shipping a regression.
+  Test:
+    name: 🧪 Test frontend and Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 检出代码仓库 / Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙ 设置 pnpm / Set up pnpm
+        uses: pnpm/action-setup@v4.1.0
+        # No `version:` here on purpose. The action reads `packageManager` from
+        # the root package.json, and declaring both makes it fail with
+        # "Multiple versions of pnpm specified".
+
+      - name: ⚙ 设置 Node.js / Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: "./pnpm-lock.yaml"
+
+      - name: 📦 安装依赖 / Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🧪 运行测试 / Run test suite
+        run: pnpm test
+
+      # Documentation is checked only where the canonical READMEs live. A fork
+      # that customizes README.md must never fail `pnpm test` (or its pipeline)
+      # because the migration list reads differently; the migration and schema
+      # regression coverage above stays repository-owner agnostic.
+      - name: 📖 校验迁移文档 / Verify migration documentation
+        if: github.repository == 'beihaime/nova-mail'
+        working-directory: ./mail-worker
+        run: node scripts/check-migration-docs.mjs
+
+  Deploy-nova-mail:
+    name: 🏗️ Build and Deploy
+    needs: Test
+    runs-on: ubuntu-latest
+
+    env:
+      NAME: ${{ secrets.NAME || vars.NAME || 'nova-mail' }}
+      CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN || vars.CUSTOM_DOMAIN }}
+      DOMAIN: ${{ secrets.DOMAIN || vars.DOMAIN }}
+      ADMIN: ${{ secrets.ADMIN || vars.ADMIN }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || vars.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID || vars.D1_DATABASE_ID }}
+      KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID || vars.KV_NAMESPACE_ID }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || vars.R2_BUCKET_NAME }}
+      PROJECT_LINK: ${{ secrets.PROJECT_LINK || vars.PROJECT_LINK }}
+      AI_MODEL: ${{ secrets.AI_MODEL || vars.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast' }}
+      CLOUDFLARE_EMAIL: ${{ secrets.CF_EMAIL || vars.CF_EMAIL || false }}
+      ANALYSIS_CACHE: ${{ secrets.ANALYSIS_CACHE || vars.ANALYSIS_CACHE || false }}
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY || vars.VAPID_PUBLIC_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY || vars.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT || vars.VAPID_SUBJECT }}
+
+
+    outputs:
+      worker_url: ${{ steps.deploy.outputs.worker_url }}
+
+
+    steps:
+      - name: 🚚 检出代码仓库 / Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙ 设置 pnpm / Set up pnpm
+        uses: pnpm/action-setup@v4.1.0
+        # Version comes from `packageManager` in the root package.json; see the
+        # Test job above.
+
+      - name: ⚙ 设置 Node.js / Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: "./pnpm-lock.yaml"
+
+      - name: 📦 安装依赖 / Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 📡 禁用 Wrangler 遥测 / Disable wrangler telemetry
+        working-directory: ./mail-worker
+        run: pnpm wrangler telemetry disable
+
+      - name: 🛠️ 设置环境 / Set up environment
+        working-directory: ./mail-worker
+        run: |
+
+          echo "🔐 Starting environment setup..."
+
+          # These values are substituted into wrangler-action.toml with `sed`
+          # below. A wrapped paste (a value holding a newline) turns those
+          # substitutions into `sed: unterminated 's' command`, which names
+          # neither the variable nor the real problem, so reject the shape up
+          # front. `[![:print:]]` catches newlines, carriage returns, tabs and
+          # other control characters; plain spaces are fine.
+          for entry in NAME CUSTOM_DOMAIN DOMAIN ADMIN R2_BUCKET_NAME PROJECT_LINK ANALYSIS_CACHE AI_MODEL VAPID_SUBJECT; do
+            entry_value="${!entry}"
+            case "$entry_value" in
+              *[![:print:]]*)
+                echo "❌ $entry must be a single line (a wrapped paste breaks the deploy)."
+                exit 1
+                ;;
+            esac
+          done
+
+          # `|` delimits the sed substitutions and `&` / `\` are special in the
+          # replacement, so escape them instead of corrupting the generated
+          # config. `mailto:` VAPID subjects may legitimately contain `&`.
+          sed_escape() { printf '%s' "$1" | sed -e 's/[&\\|]/\\&/g'; }
+
+          # `|` delimits the sed substitutions and `&` re-inserts the matched
+          # text, so either one would corrupt the generated config instead of
+          # failing loudly.
+          if [ -z "$JWT_SECRET" ]; then
+            echo "❌ JWT_SECRET repository secret is required."
+            exit 1
+          fi
+
+          if ! jq -e 'type == "array"' <<< "$DOMAIN" ; then
+            echo "❌ DOMAIN variable must be a JSON array (e.g., [\"example.com\"])."
+            exit 1
+          fi
+
+          if [ -z "$ADMIN" ]; then
+            echo "❌ ADMIN variable cannot be empty."
+            exit 1
+          fi
+
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "❌ CLOUDFLARE_ACCOUNT_ID variable cannot be empty."
+            exit 1
+          fi
+
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "❌ CLOUDFLARE_API_TOKEN variable cannot be empty."
+            exit 1
+          fi
+
+          if [ -z "$CUSTOM_DOMAIN" ]; then
+            echo "::warning:: CUSTOM_DOMAIN variable is not set."
+          fi
+
+          CONFIG_FILE="wrangler-action.toml"
+
+          if [ -z "$R2_BUCKET_NAME" ]; then
+            sed -i '/\[\[r2_buckets\]\]/,/^$/d' "$CONFIG_FILE"
+          fi
+
+          if [ -z "$PROJECT_LINK" ]; then
+            sed -i '/^project_link = /d' "$CONFIG_FILE"
+          fi
+
+          if [ -z "$CUSTOM_DOMAIN" ]; then
+            sed -i '/\[\[routes\]\]/,/^$/d' "$CONFIG_FILE"
+          fi
+
+          if [ "$(printf '%s' "$CLOUDFLARE_EMAIL" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+            cat >> "$CONFIG_FILE" <<'EOF'
+
+          [[send_email]]
+          name = "email"
+          EOF
+          fi
+
+          sed -i "s|\${NAME}|$(sed_escape "$NAME")|g" "$CONFIG_FILE"
+          sed -i "s|\${CUSTOM_DOMAIN}|$(sed_escape "$CUSTOM_DOMAIN")|g" "$CONFIG_FILE"
+          sed -i "s|\"\${DOMAIN}\"|$(sed_escape "$DOMAIN")|g" "$CONFIG_FILE"
+          sed -i "s|\${ADMIN}|$(sed_escape "$ADMIN")|g" "$CONFIG_FILE"
+          sed -i "s|\${R2_BUCKET_NAME}|$(sed_escape "$R2_BUCKET_NAME")|g" "$CONFIG_FILE"
+          sed -i "s|\${PROJECT_LINK}|$(sed_escape "$PROJECT_LINK")|g" "$CONFIG_FILE"
+          sed -i "s|\${ANALYSIS_CACHE}|$(sed_escape "$ANALYSIS_CACHE")|g" "$CONFIG_FILE"
+          sed -i "s|\${AI_MODEL}|$(sed_escape "$AI_MODEL")|g" "$CONFIG_FILE"
+          sed -i "s|\${LINUXDO_CLIENT_ID}|$(sed_escape "${LINUXDO_CLIENT_ID:-}")|g" "$CONFIG_FILE"
+          sed -i "s|\${LINUXDO_CLIENT_SECRET}|$(sed_escape "${LINUXDO_CLIENT_SECRET:-}")|g" "$CONFIG_FILE"
+          sed -i "s|\${LINUXDO_CALLBACK_URL}|$(sed_escape "${LINUXDO_CALLBACK_URL:-}")|g" "$CONFIG_FILE"
+          # Ordinary, non-secret Web Push contact identifier. Declared in [vars]
+          # so it is repository-managed and survives the one-time keep_vars=false
+          # JWT migration deploy. Falls back to the Worker's own default when the
+          # repository does not configure one.
+          sed -i "s|\${VAPID_SUBJECT}|$(sed_escape "${VAPID_SUBJECT:-mailto:admin@example.com}")|g" "$CONFIG_FILE"
+
+          echo "✅ Environment setup completed."
+
+      - name: 🧭 规划 JWT 密钥迁移 / Plan JWT secret migration
+        id: jwt_migration
+        working-directory: ./mail-worker
+        run: |
+          # A Worker cannot carry a plain-text `[vars]` binding and a secret with
+          # the same name. Installations deployed before the JWT hardening still
+          # hold `jwt_secret` as a plain-text binding, so a separate
+          # `wrangler secret put` fails with
+          #   Binding name 'jwt_secret' already in use
+          # and aborts the run before the deploy that would have removed it — a
+          # permanent deadlock. Detect that legacy binding once and let this
+          # deployment replace it; later runs take the normal path.
+          #
+          # Only binding *names* from the Cloudflare API are read here. No secret
+          # value is read, printed or written by this step.
+          CONFIG_FILE="wrangler-action.toml"
+
+          settings_status=0
+          settings=""
+          set +e
+          settings=$(curl --silent --show-error --max-time 30 \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$NAME/settings")
+          settings_status=$?
+          set -e
+
+          if [ "$settings_status" -ne 0 ] || ! printf '%s' "$settings" | jq -e '.success == true' >/dev/null 2>&1; then
+            echo "ℹ️ Could not read the live Worker bindings (first deployment or restricted token); assuming no legacy var."
+            echo "legacy_jwt_var=false" >> "$GITHUB_OUTPUT"
+            echo "vapid_subject_secret=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The planner owns the canonical managed-binding set, so the
+          # classification the pipeline uses is the classification the unit
+          # tests exercise (scripts/plan-jwt-migration.mjs). Cloudflare binding
+          # names are case-sensitive; the set is built from the generated
+          # [vars] plus the historical names this repository has ever managed.
+          PLAN=$(printf '%s' "$settings" | node scripts/plan-jwt-migration.mjs --config "$CONFIG_FILE")
+          legacy=$(printf '%s' "$PLAN" | jq -r '.legacy_jwt_var')
+          unexpected=$(printf '%s' "$PLAN" | jq -r '.unexpected[]')
+          vapid_secret=$(printf '%s' "$PLAN" | jq -r '.drop_vapid_subject_var')
+          echo "Repository-managed ordinary bindings: $(printf '%s' "$PLAN" | jq -r '.managed | join(", ")')"
+
+          # `vapid_subject` is declared as an ordinary, non-secret [vars] entry.
+          # If an installation already holds it as a Worker Secret, that secret
+          # must not be shadowed by the plain-text entry: keep the secret and
+          # remove the generated var. The push-key step re-uploads it as a secret
+          # in that case.
+          echo "vapid_subject_secret=$vapid_secret" >> "$GITHUB_OUTPUT"
+          if [ "$vapid_secret" = "true" ]; then
+            echo "ℹ️ vapid_subject is a Worker Secret; keeping the secret and removing the generated [vars] entry."
+            sed -i '/^vapid_subject = /d' "$CONFIG_FILE"
+          fi
+
+          if [ "$legacy" != "true" ]; then
+            echo "✅ No legacy plain-text jwt_secret binding; the deployment uploads the secret normally."
+            echo "legacy_jwt_var=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "🔁 Legacy plain-text jwt_secret binding detected; this deployment will replace it."
+
+          # Removing unspecified vars is exactly how the legacy binding goes
+          # away, so every other plain-text binding must be repository-managed.
+          # `jwt_secret` itself is excluded from this check; a genuinely unknown
+          # live variable aborts the migration instead of being dropped.
+          if [ -n "$unexpected" ]; then
+            echo "❌ The Worker has plain-text vars this repository does not manage:"
+            printf '   - %s\n' $unexpected
+            echo "Declare them in wrangler-action.toml [vars] before this migration, so it cannot drop them."
+            exit 1
+          fi
+
+          # keep_vars stays true on every later run; only this migration deploy is
+          # allowed to remove the legacy binding.
+          sed -i 's/^keep_vars *= *true/keep_vars = false/' "$CONFIG_FILE"
+          echo "legacy_jwt_var=true" >> "$GITHUB_OUTPUT"
+          echo "✅ This deployment will replace the legacy plain-text binding with a Worker secret."
+
+      - name: ⚡ 设置KV数据库 / Set up KV database
+        working-directory: ./mail-worker
+        run: |
+
+          CONFIG_FILE="wrangler-action.toml"
+
+          if [ -n "$KV_NAMESPACE_ID" ]; then
+            sed -i "s|\${KV_NAMESPACE_ID}|${KV_NAMESPACE_ID}|g" "$CONFIG_FILE"
+            echo "✅ Using the database from environment variables."
+            exit 0
+          fi
+
+          echo "🔍 Checking if the database exists..."
+
+          set +e
+            KV_LIST=$(pnpm wrangler kv namespace list 2>&1)
+            STATUS=$?
+          set -e
+
+          if [ $STATUS -ne 0 ]; then
+            echo "$KV_LIST"
+            exit 1
+          fi
+
+          if echo "$KV_LIST" | jq -e ".[] | select(.title == \"$NAME\")" >/dev/null; then
+            echo "✅ Database $NAME already exists."
+            KV_ID=$(echo "$KV_LIST" | jq -r ".[] | select(.title == \"$NAME\") | .id")
+            echo "KV_NAMESPACE_ID: $KV_ID"
+          else
+            echo "⚠️ Database $NAME does not exist. Starting creation..."
+            pnpm wrangler kv namespace create $NAME
+            KV_LIST=$(pnpm wrangler kv namespace list)
+            KV_ID=$(echo "$KV_LIST" | jq -r ".[] | select(.title == \"$NAME\") | .id")
+          fi
+
+          sed -i "s|\${KV_NAMESPACE_ID}|$KV_ID|g" "$CONFIG_FILE"
+          echo "✅ Setup completed."
+
+      - name: 🐬 设置D1数据库 / Set up D1 database
+        working-directory: ./mail-worker
+        run: |
+
+          CONFIG_FILE="wrangler-action.toml"
+
+          # Never silently create or select an empty database for a release.
+          # The same explicit ID is used by schema migration, verification and
+          # the Worker binding below.
+          if [ -z "$D1_DATABASE_ID" ]; then
+            echo "❌ D1_DATABASE_ID is required for an existing production database."
+            exit 1
+          fi
+
+          sed -i "s|\${D1_DATABASE_ID}|${D1_DATABASE_ID}|g" "$CONFIG_FILE"
+          echo "✅ Using the explicitly configured D1 database: $D1_DATABASE_ID"
+
+      # The Worker serves the SPA from `./dist` ([assets] in wrangler-*.toml) and
+      # `dist` is gitignored, so the frontend MUST be built before deploying —
+      # otherwise the Worker keeps serving a stale build (e.g. an old reader
+      # bundle), which is exactly how "my fix doesn't show up" happens.
+      - name: 🎨 构建前端 / Build frontend
+        working-directory: ./mail-vue
+        run: |
+          echo "🎨 Building Mail frontend..."
+          # Dependencies were installed once at the workspace root; the build
+          # writes into ../mail-worker/dist (see mail-vue/.env.release).
+          pnpm run build
+          echo "✅ Frontend built into mail-worker/dist"
+
+      # The old /api/init/<jwt_secret> route was removed. Existing databases
+      # cannot use one-time bootstrap for upgrades, so make compatible schema
+      # upgrades before the new Worker is deployed.
+      - name: 🔎 检查现有数据库 / Check existing schema
+        id: schema
+        working-directory: ./mail-worker
+        run: |
+          CONFIG_FILE="wrangler-action.toml"
+          DB_ID=$(sed -n 's/^database_id = "\([^"]*\)"/\1/p' wrangler-action.toml)
+          SCHEMA=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('email', 'setting');")
+          # The same signal the Worker uses (see isApplicationInitialized in
+          # src/init/bootstrap.js): a populated `setting` row means the database
+          # is initialized. A database without it is a first-time install and the
+          # one-time bootstrap endpoint is required. `|| true` keeps a missing
+          # `setting` table from aborting this probe.
+          INITIALIZED=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT 1 AS initialized FROM setting LIMIT 1;" || true)
+          if ! printf '%s' "$SCHEMA" | grep -q '"email"' || ! printf '%s' "$INITIALIZED" | grep -q '"initialized"'; then
+            echo "new_database=true" >> "$GITHUB_OUTPUT"
+            echo "New database; one-time bootstrap will create the schema."
+            exit 0
+          fi
+
+          # SQLite has no `ADD COLUMN IF NOT EXISTS`, so an additive column is
+          # guarded by `pragma_table_info`. A partially applied migration still
+          # recovers, and a fully migrated database is a no-op. Defining the
+          # helper first lets every later migration reuse it.
+          ensure_column() {
+            local table="$1" column="$2" definition="$3"
+            local present
+            present=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+              --command "SELECT name FROM pragma_table_info('$table') WHERE name = '$column';")
+            if printf '%s' "$present" | grep -q "\"$column\""; then
+              echo "✅ $table.$column already exists."
+            else
+              echo "➕ Adding $table.$column"
+              pnpm wrangler d1 execute "$DB_ID" --remote --yes \
+                --command "ALTER TABLE $table ADD COLUMN $column $definition;"
+            fi
+          }
+
+          # v3.6 – v3.11 mail columns the current list and reader query. These
+          # used to be treated as "must already exist"; an existing installation
+          # that predates them is now upgraded instead of being refused.
+          ensure_column email body_type "TEXT NOT NULL DEFAULT ''"
+          ensure_column email thread_id "TEXT NOT NULL DEFAULT ''"
+          ensure_column email parent_message_id "INTEGER NOT NULL DEFAULT 0"
+          ensure_column email bimi_selector "TEXT NOT NULL DEFAULT ''"
+          ensure_column email auth_results "TEXT NOT NULL DEFAULT ''"
+          ensure_column email archived "INTEGER NOT NULL DEFAULT 0"
+          ensure_column email trashed "INTEGER NOT NULL DEFAULT 0"
+          ensure_column email trashed_at "TEXT NOT NULL DEFAULT ''"
+          ensure_column email trash_archived "INTEGER NOT NULL DEFAULT 0"
+
+          # Runtime-critical identity columns introduced by v1.4 / v2.6 / v2.8.
+          ensure_column user reg_key_id "INTEGER NOT NULL DEFAULT 0"
+          ensure_column account all_receive "INTEGER NOT NULL DEFAULT 0"
+          ensure_column account sort "INTEGER NOT NULL DEFAULT 0"
+
+          # v3.11: every normal mail-list query now filters `trashed`.
+          pnpm wrangler d1 execute "$DB_ID" --remote --yes \
+            --command "CREATE INDEX IF NOT EXISTS idx_email_user_trashed ON email(user_id, trashed, account_id);"
+
+          # v3.4 – v3.7: OAuth account links, OAuth handshake state, conversation
+          # indexes and Web Push subscriptions. The v3.12 identity migration below
+          # re-points OAuth links and push subscriptions while merging duplicate
+          # identities, so these objects must exist first.
+          echo "🔁 Applying non-destructive migration: migrations/v3_4_v3_7_tables.sql"
+          pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_4_v3_7_tables.sql
+
+          # v3.12: mailbox identities must be canonical before a Worker that
+          # matches them case-insensitively is released. `dbInit.v3_12DB` only
+          # runs from the one-time bootstrap, which an existing database can
+          # never use again (the route answers 409), so the same idempotent work
+          # is applied here as a forward-only migration. Skipped when every row
+          # is already canonical and both NOCASE unique keys exist.
+          IDENTITY=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT (SELECT count(*) FROM user WHERE email != lower(trim(email))) + (SELECT count(*) FROM account WHERE email != lower(trim(email))) + (SELECT count(*) FROM email WHERE (send_email IS NOT NULL AND send_email != lower(trim(send_email))) OR (to_email IS NOT NULL AND to_email != lower(trim(to_email)))) AS pending;")
+          IDENTITY_INDEXES=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_user_email_nocase', 'idx_account_email_nocase');")
+          if printf '%s' "$IDENTITY" | grep -Eq '"pending": *0' && \
+             printf '%s' "$IDENTITY_INDEXES" | grep -q '"idx_user_email_nocase"' && \
+             printf '%s' "$IDENTITY_INDEXES" | grep -q '"idx_account_email_nocase"'; then
+            echo "✅ Mailbox identities are already canonical."
+          else
+            echo "📛 Applying non-destructive migration: migrations/v3_12_email_identity.sql"
+            echo "D1 binding: db"
+            echo "database_name: $(sed -n 's/^database_name = "\([^"]*\)"/\1/p' "$CONFIG_FILE")"
+            echo "database_id: $DB_ID"
+            echo "--- migration SQL ---"
+            cat migrations/v3_12_email_identity.sql
+            echo "--- end migration SQL ---"
+            pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_12_email_identity.sql
+          fi
+
+          # v3.13: authentication now requires the server-side session table.
+          # The repository keeps this as an explicit additive migration rather
+          # than enabling Wrangler's full migration history for legacy D1s,
+          # whose older ALTER migrations are not safely replayable.
+          SESSION_SCHEMA=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('auth_session', 'user_security_settings');")
+          if ! printf '%s' "$SESSION_SCHEMA" | grep -q '"auth_session"' || \
+             ! printf '%s' "$SESSION_SCHEMA" | grep -q '"user_security_settings"'; then
+            echo "🔐 Applying non-destructive migration: migrations/v3_13_sessions.sql"
+            echo "D1 binding: db"
+            echo "database_name: $(sed -n 's/^database_name = "\([^"]*\)"/\1/p' "$CONFIG_FILE")"
+            echo "database_id: $DB_ID"
+            echo "--- migration SQL ---"
+            cat migrations/v3_13_sessions.sql
+            echo "--- end migration SQL ---"
+            pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_13_sessions.sql
+          else
+            echo "✅ auth_session and user_security_settings already exist in the deployment D1."
+          fi
+
+          # v3.14: user-scoped display preferences. Apply before deploying the
+          # Worker so the new authenticated endpoint never sees a missing table.
+          PREF_SCHEMA=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'user_preferences';")
+          if ! printf '%s' "$PREF_SCHEMA" | grep -q '"user_preferences"'; then
+            echo "🎛️ Applying non-destructive migration: migrations/v3_14_user_preferences.sql"
+            echo "D1 binding: db"
+            echo "database_name: $(sed -n 's/^database_name = "\([^"]*\)"/\1/p' "$CONFIG_FILE")"
+            echo "database_id: $DB_ID"
+            echo "--- migration SQL ---"
+            cat migrations/v3_14_user_preferences.sql
+            echo "--- end migration SQL ---"
+            pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_14_user_preferences.sql
+          fi
+          PREF_COLUMN=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM pragma_table_info('user_preferences') WHERE name = 'mail_list_density';")
+          if ! printf '%s' "$PREF_COLUMN" | grep -q '"mail_list_density"'; then
+            echo "❌ user_preferences.mail_list_density missing from deployment D1" >&2
+            exit 1
+          fi
+
+          # v3.24: the per-user default sender address. Additive and nullable, so
+          # an existing installation keeps working with the primary address as the
+          # effective default until the user chooses another one.
+          ensure_column user_preferences default_sender_account_id "INTEGER REFERENCES account(account_id) ON DELETE SET NULL"
+
+          # v3.15: Message-ID uniqueness scoped to one receiving mailbox, so a
+          # retried webhook / Cloudflare delivery cannot store the same message
+          # twice. Legacy duplicate rows are preserved: when any exist the unique
+          # index only covers rows after them, exactly like dbInit.v3_15DB. The
+          # old, user-wide unique index is dropped so two mailboxes may hold the
+          # same Message-ID.
+          MESSAGE_ID_INDEX=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_email_mailbox_message_id_unique';")
+          if printf '%s' "$MESSAGE_ID_INDEX" | grep -q '"idx_email_mailbox_message_id_unique"'; then
+            echo "✅ Mailbox-scoped Message-ID index already exists."
+          else
+            MESSAGE_ID_DUP=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+              --command "SELECT 1 AS dup FROM email WHERE trim(message_id, '<> ') != '' GROUP BY user_id, account_id, lower(trim(message_id, '<> ')) HAVING count(*) > 1 LIMIT 1;")
+            MESSAGE_ID_CUTOFF=0
+            if printf '%s' "$MESSAGE_ID_DUP" | grep -q '"dup"'; then
+              MESSAGE_ID_CUTOFF=$(pnpm wrangler d1 execute "$DB_ID" --remote --yes --json \
+                --command "SELECT coalesce(max(email_id), 0) AS id FROM email;" | jq -r '.[0].results[0].id')
+            fi
+            if [ "${MESSAGE_ID_CUTOFF:-0}" -gt 0 ]; then
+              MESSAGE_ID_SQL="CREATE UNIQUE INDEX idx_email_mailbox_message_id_unique ON email(user_id, account_id, lower(trim(message_id, '<> '))) WHERE trim(message_id, '<> ') != '' AND email_id > ${MESSAGE_ID_CUTOFF}"
+            else
+              MESSAGE_ID_SQL="CREATE UNIQUE INDEX idx_email_mailbox_message_id_unique ON email(user_id, account_id, lower(trim(message_id, '<> '))) WHERE trim(message_id, '<> ') != ''"
+            fi
+            echo "🔁 Applying non-destructive migration: mailbox-scoped Message-ID uniqueness"
+            pnpm wrangler d1 execute "$DB_ID" --remote --yes \
+              --command "DROP INDEX IF EXISTS idx_email_message_id_unique;"
+            pnpm wrangler d1 execute "$DB_ID" --remote --yes --command "$MESSAGE_ID_SQL"
+          fi
+
+          # v3.16 – v3.23: the outbound send-lifecycle schema. New installations
+          # receive it from the one-time bootstrap; an existing installation can
+          # never bootstrap again, so without this a released Worker that queries
+          # `email.send_operation_id` or `outbound_send` fails every request with
+          # "no such column" and the SPA reports "Please update the database as
+          # documented". Apply the additive pieces here, before the deploy. The
+          # `ensure_column` helper is defined once at the top of this step.
+          ensure_column email send_operation_id "TEXT NOT NULL DEFAULT ''"
+          ensure_column attachments send_operation_id "TEXT NOT NULL DEFAULT ''"
+          ensure_column attachments send_ordinal "INTEGER NOT NULL DEFAULT -1"
+
+          echo "🔁 Applying non-destructive migration: migrations/v3_16_send_lifecycle.sql"
+          pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_16_send_lifecycle.sql
+
+          # The table now exists, so its later columns can be guaranteed too.
+          ensure_column outbound_send reconcile_lease_until "INTEGER NOT NULL DEFAULT 0"
+          ensure_column outbound_send reconcile_lease_token "TEXT NOT NULL DEFAULT ''"
+          # A webhook remains retryable until its durable status mutation commits.
+          ensure_column resend_webhook_event status "TEXT NOT NULL DEFAULT 'received'"
+          ensure_column resend_webhook_event processing_until "INTEGER NOT NULL DEFAULT 0"
+          ensure_column resend_webhook_event applied_at "INTEGER"
+
+          echo "🔁 Applying non-destructive migration: migrations/v3_16_send_lifecycle_indexes.sql"
+          pnpm wrangler d1 execute "$DB_ID" --remote --yes --file migrations/v3_16_send_lifecycle_indexes.sql
+
+          # Fail-closed gate: every migration above has now run, so the database
+          # must satisfy the schema the current Worker queries. Nothing reaches
+          # the deploy when a table, column, index or identity invariant is
+          # missing or violated.
+          echo "🔎 Verifying the deployed schema against the current Worker's requirements..."
+          bash scripts/verify-schema.sh "$DB_ID"
+
+          # Existing installation: the schema above is already migrated and
+          # verified, so the one-time bootstrap endpoint must not be called.
+          echo "new_database=false" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 开始部署 / Start deployment
+        id: deploy
+        working-directory: ./mail-worker
+        run: |
+          echo "🚀 Starting deployment..."
+
+          # The signing key ships *with* the deployment instead of through a
+          # separate `wrangler secret put`. The dedicated secrets endpoint cannot
+          # create a secret while a plain-text var of the same name exists, and
+          # it cannot remove that var; one deployment replaces both in a single
+          # atomic version, so the Worker is never live without a signing key.
+          #
+          # The value goes to a 0600 file under $RUNNER_TEMP (outside the
+          # checkout) and is deleted when the step ends. It never reaches a log,
+          # a command-line argument, a committed file or an artifact.
+          SECRETS_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/nova-jwt.XXXXXX")"
+          chmod 600 "$SECRETS_FILE"
+          cleanup_secrets_file() { rm -f "$SECRETS_FILE"; }
+          trap cleanup_secrets_file EXIT
+          # `jq -Rs` reads the value from stdin, so it is not exposed in argv.
+          printf '%s' "$JWT_SECRET" | jq -Rs '{jwt_secret: .}' > "$SECRETS_FILE"
+
+          # The deploy summary prints every `[vars]` entry. `domain` is a
+          # credential in this repository's configuration and the logs of a
+          # public repository are public, so mask it (and any stale jwt_secret
+          # line, defensively).
+          pnpm wrangler deploy -c wrangler-action.toml --secrets-file "$SECRETS_FILE" 2>&1 \
+            | tee deploy.log \
+            | grep -v "https://.*\.workers\.dev" \
+            | sed -E -e 's/env\.domain .*/env.domain (***)/' -e 's/env\.jwt_secret .*/env.jwt_secret (***)/' \
+            || true
+
+          DEPLOY_EXIT_CODE=${PIPESTATUS[0]}
+          if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+            exit 1
+          fi
+
+          WORKER_URL=$(grep -o "https://.*\.workers\.dev" deploy.log || echo "")
+
+          if [ -n "$WORKER_URL" ]; then
+            echo "::add-mask::$WORKER_URL"
+          fi
+
+          echo "worker_url=$WORKER_URL" >> $GITHUB_OUTPUT
+          echo "✅ Setup completed."
+
+      # Web Push only works when the Worker holds a VAPID key pair; without it
+      # `GET /api/push/config` reports `enabled: false` and the settings page
+      # disables the 邮件通知 switch ("服务端未配置"). They are uploaded as Worker
+      # secrets rather than `[vars]`, so they never reach the deploy summary.
+      # Rotating the pair invalidates every existing subscription.
+      # This step must never fail the run. The Worker is already deployed at this
+      # point, and Cloudflare can refuse a secret edit outright
+      # ("the latest version of your Worker isn't currently deployed") whenever the
+      # account holds an undeployed version. A red X here used to skip the database
+      # initialization below, which is far worse than a stale key pair.
+      - name: 🔔 配置推送密钥 / Configure Web Push keys
+        working-directory: ./mail-worker
+        run: |
+          if [ -z "$VAPID_PUBLIC_KEY" ] || [ -z "$VAPID_PRIVATE_KEY" ]; then
+            echo "::warning::VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set; Web Push stays unavailable."
+            exit 0
+          fi
+
+          upload() {
+            local name="$1" value="$2"
+            if printf '%s' "$value" | pnpm wrangler secret put "$name" -c wrangler-action.toml; then
+              echo "✅ uploaded $name"
+            else
+              # Known causes: a name already used by a plain Worker variable, or an
+              # undeployed version on the account. Either way the value that is
+              # already on the Worker is kept, so this is a warning, not a failure.
+              echo "::warning::could not upload $name — keeping whatever the Worker already has (see the error above)."
+            fi
+          }
+
+          upload vapid_public_key "$VAPID_PUBLIC_KEY"
+          upload vapid_private_key "$VAPID_PRIVATE_KEY"
+
+          # `vapid_subject` is an ordinary, non-secret [vars] binding. It is
+          # only uploaded as a Worker Secret when an installation already holds
+          # it that way: the JWT planner removes the generated [vars] entry in
+          # that case so the plain-text binding cannot shadow the secret.
+          if grep -q '^vapid_subject = ' wrangler-action.toml; then
+            echo "ℹ️ vapid_subject is an ordinary [vars] binding; no secret upload needed."
+          else
+            upload vapid_subject "${VAPID_SUBJECT:-mailto:admin@example.com}"
+          fi
+
+          echo "--- Worker secret names ---"
+          pnpm wrangler secret list -c wrangler-action.toml || true
+
+          if pnpm wrangler secret list -c wrangler-action.toml 2>/dev/null | grep -q vapid_public_key; then
+            echo "✅ VAPID keys are on the Worker."
+          else
+            echo "::warning::vapid_public_key is not on the Worker; Web Push will report itself unavailable."
+          fi
+
+      # `/api/bootstrap` validates the `X-Bootstrap-Token` header against
+      # `c.env.BOOTSTRAP_TOKEN` (mail-worker/src/init/bootstrap.js). That value
+      # must live as a Cloudflare Worker *secret* — never a `[vars]` entry in
+      # wrangler-action.toml — and only a first-time installation needs it. An
+      # existing installation skips this step, so a stale or absent repository
+      # secret can no longer churn the Worker or fail an upgrade. The value is
+      # piped over stdin so it never reaches the log or the process list.
+      - name: 🔑 配置引导令牌 / Configure bootstrap secret
+        if: steps.schema.outputs.new_database == 'true'
+        working-directory: ./mail-worker
+        run: |
+          if [ -z "$BOOTSTRAP_TOKEN" ]; then
+            echo "::warning::BOOTSTRAP_TOKEN is unset; first-time database initialization must be completed separately."
+            exit 0
+          fi
+
+          if [ "${#BOOTSTRAP_TOKEN}" -lt 32 ]; then
+            echo "❌ BOOTSTRAP_TOKEN must be at least 32 characters long."
+            exit 1
+          fi
+
+          if ! printf '%s' "$BOOTSTRAP_TOKEN" | pnpm wrangler secret put BOOTSTRAP_TOKEN -c wrangler-action.toml; then
+            echo "❌ Failed to upload BOOTSTRAP_TOKEN as a Worker secret; first-time initialization cannot run."
+            exit 1
+          fi
+
+          if pnpm wrangler secret list -c wrangler-action.toml 2>/dev/null | grep -q 'BOOTSTRAP_TOKEN'; then
+            echo "✅ BOOTSTRAP_TOKEN is on the Worker."
+          else
+            echo "❌ BOOTSTRAP_TOKEN is missing from the Worker secret list."
+            exit 1
+          fi
+
+      # Only an uninitialized database needs the one-time endpoint. The script
+      # takes that decision from the schema step, never POSTs on an existing
+      # installation, and separates a Mail rejection (404 = bad token) from
+      # a Cloudflare/WAF/edge response that never reached the Worker.
+      # BOOTSTRAP_TOKEN and the URLs are passed through the environment and the
+      # token is never printed or redacted into the log.
+      - name: ♻️ 初始化数据库 / Initialize database
+        working-directory: ./mail-worker
+        env:
+          NEW_DATABASE: ${{ steps.schema.outputs.new_database }}
+          BOOTSTRAP_URL: ${{ steps.deploy.outputs.worker_url }}
+          BOOTSTRAP_FALLBACK_URL: ${{ steps.deploy.outputs.worker_url }}
+        run: |
+          echo "🛠️ Checking database bootstrap status..."
+
+          if [ "$NEW_DATABASE" = "true" ]; then
+            # Give the freshly deployed Worker a moment to propagate.
+            sleep 15
+          fi
+
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            BOOTSTRAP_URL="https://$CUSTOM_DOMAIN"
+          fi
+
+          node scripts/bootstrap-database.mjs --new-database "$NEW_DATABASE"
+
+      # Bootstrap runs only on new installations. Existing databases need
+      # migrations applied out of band before deploying code that requires them.
+      # Read the schema back so a missing migration cannot look like success.
+      - name: 🔎 验证数据库 / Verify database schema
+        working-directory: ./mail-worker
+        run: |
+          echo "🔎 Checking required email schema..."
+
+          VERIFY_DB_ID=$(sed -n 's/^database_id = "\([^"]*\)"/\1/p' wrangler-action.toml)
+          echo "D1 binding: db"
+          echo "database_name: $(sed -n 's/^database_name = "\([^"]*\)"/\1/p' wrangler-action.toml)"
+          echo "database_id: $VERIFY_DB_ID"
+
+          # `--json` sends errors to stdout as well, so a plain
+          # `SCHEMA=$(...)` under `bash -e` would exit on failure and swallow the
+          # reason — capture both streams and report them instead.
+          set +e
+          SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM pragma_table_info('email');" 2>&1)
+          STATUS=$?
+          set -e
+
+          echo "exit status: $STATUS"
+          echo "$SCHEMA"
+
+          if [ "$STATUS" -ne 0 ]; then
+            # Reading a remote D1 database goes through the account-level D1 API,
+            # which a token scoped to Workers + KV alone cannot use (Cloudflare
+            # filters the database list, so wrangler reports "Couldn't find DB").
+            # The deploy and the initialization call both succeeded at this
+            # point, so warn instead of failing the whole run.
+            echo "::warning::Could not read the schema; give CLOUDFLARE_API_TOKEN the D1 → Edit permission to verify it automatically."
+            exit 0
+          fi
+
+          for column in body_type trashed trashed_at trash_archived send_operation_id; do
+            if ! printf '%s' "$SCHEMA" | grep -q "\"$column\""; then
+              echo "❌ email.$column is missing: its migration did not apply."
+              exit 1
+            fi
+          done
+
+          # v3.16 – v3.23: the send-lifecycle tables are created by the existing-
+          # installation migration, not by bootstrap, so verify them explicitly.
+          # A Worker deployed against a database without them answers 502.
+          LIFECYCLE_SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('outbound_send', 'outbound_send_snapshot', 'outbound_send_attachment', 'storage_cleanup', 'resend_webhook_event', 'resend_recipient_delivery');" 2>&1)
+          echo "$LIFECYCLE_SCHEMA"
+          for table in outbound_send outbound_send_snapshot outbound_send_attachment storage_cleanup resend_webhook_event resend_recipient_delivery; do
+            if ! printf '%s' "$LIFECYCLE_SCHEMA" | grep -q "\"$table\""; then
+              echo "❌ $table is missing from the deployed D1."
+              exit 1
+            fi
+          done
+
+          WEBHOOK_EVENT_SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM pragma_table_info('resend_webhook_event') WHERE name IN ('status', 'processing_until', 'applied_at');" 2>&1)
+          echo "$WEBHOOK_EVENT_SCHEMA"
+          for column in status processing_until applied_at; do
+            if ! printf '%s' "$WEBHOOK_EVENT_SCHEMA" | grep -q "\"$column\""; then
+              echo "❌ resend_webhook_event.$column is missing: its migration did not apply."
+              exit 1
+            fi
+          done
+
+          ATTACHMENT_SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM pragma_table_info('attachments') WHERE name IN ('send_operation_id', 'send_ordinal');" 2>&1)
+          echo "$ATTACHMENT_SCHEMA"
+          for column in send_operation_id send_ordinal; do
+            if ! printf '%s' "$ATTACHMENT_SCHEMA" | grep -q "\"$column\""; then
+              echo "❌ attachments.$column is missing: its migration did not apply."
+              exit 1
+            fi
+          done
+
+          SESSION_SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('auth_session', 'user_security_settings');" 2>&1)
+          echo "$SESSION_SCHEMA"
+          if ! printf '%s' "$SESSION_SCHEMA" | grep -q '"auth_session"' || \
+             ! printf '%s' "$SESSION_SCHEMA" | grep -q '"user_security_settings"'; then
+            echo "❌ Session schema is missing from the deployed D1."
+            exit 1
+          fi
+
+          # v3.12: a Worker that matches identities case-insensitively must not
+          # be live against a database whose addresses are still mixed-case or
+          # padded. Read both the NOCASE keys and the remaining row count back.
+          IDENTITY_SCHEMA=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_user_email_nocase', 'idx_account_email_nocase');" 2>&1)
+          echo "$IDENTITY_SCHEMA"
+          for index in idx_user_email_nocase idx_account_email_nocase; do
+            if ! printf '%s' "$IDENTITY_SCHEMA" | grep -q "\"$index\""; then
+              echo "❌ $index is missing: the email identity migration did not apply."
+              exit 1
+            fi
+          done
+
+          IDENTITY_ROWS=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT (SELECT count(*) FROM user WHERE email != lower(trim(email))) + (SELECT count(*) FROM account WHERE email != lower(trim(email))) AS pending;" 2>&1)
+          echo "$IDENTITY_ROWS"
+          if ! printf '%s' "$IDENTITY_ROWS" | grep -Eq '"pending": *0'; then
+            echo "❌ Non-canonical mailbox identities remain in the deployed D1."
+            exit 1
+          fi
+
+          # v3.15: mailbox-scoped Message-ID uniqueness so a retried delivery
+          # cannot store the same message twice.
+          MESSAGE_ID_INDEX=$(pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_email_mailbox_message_id_unique';" 2>&1)
+          echo "$MESSAGE_ID_INDEX"
+          if ! printf '%s' "$MESSAGE_ID_INDEX" | grep -q '"idx_email_mailbox_message_id_unique"'; then
+            echo "❌ idx_email_mailbox_message_id_unique is missing: the v3.15 migration did not apply."
+            exit 1
+          fi
+
+          # Full schema gate. Runs against a freshly bootstrapped database too,
+          # so the release is verified even when the pre-deploy check skipped.
+          bash scripts/verify-schema.sh "$VERIFY_DB_ID"
+
+          pnpm wrangler d1 execute "$VERIFY_DB_ID" --remote --yes --json \
+            --command "SELECT body_type, COUNT(*) AS total FROM email GROUP BY body_type;"
+
+          echo "✅ Required email and session schema are present."
+
+      - name: 🗑️ 删除运行记录 / Delete workflow runs
+        uses: GitRML/delete-workflow-runs@main
+        continue-on-error: true
+        with:
+          retain_days: '1'
+          keep_minimum_runs: '0'

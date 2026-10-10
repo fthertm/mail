@@ -1,0 +1,60 @@
+name = "${NAME}"
+main = "src/index.js"
+compatibility_date = "2025-06-04"
+# A deploy replaces the Worker's plain-text vars with the ones in this file. The
+# production config (wrangler.toml) also carries TURNSTILE_HOSTNAME, which the
+# Worker uses for both the Turnstile hostname check and the CORS allowlist —
+# without this the CI deploy would quietly drop it. Keep it in both places.
+workers_dev = true
+keep_vars = true
+
+[observability]
+enabled = true
+
+[[routes]]
+pattern = "${CUSTOM_DOMAIN}"
+custom_domain = true
+
+[[d1_databases]]
+binding = "db"
+database_name = "nova-mail"
+database_id = "${D1_DATABASE_ID}"
+
+[[kv_namespaces]]
+binding = "kv"
+id = "${KV_NAMESPACE_ID}"
+
+[[r2_buckets]]
+binding = "r2"
+bucket_name = "${R2_BUCKET_NAME}"
+
+[ai]
+binding = "ai"
+
+[assets]
+binding = "assets"
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[triggers]
+crons = ["0 * * * *"]	#每小时执行；resetDaySendCount 仅在 UTC 0 点生效
+
+
+[vars]
+ai_model = "${AI_MODEL}"
+analysis_cache = "${ANALYSIS_CACHE}"
+#orm_log = false
+domain = "${DOMAIN}"
+admin = "${ADMIN}"
+project_link = "${PROJECT_LINK}"
+TURNSTILE_HOSTNAME = "${CUSTOM_DOMAIN}"
+# Public Web Push contact identifier (`mailto:`/`https:`). This is an ordinary
+# binding, not a secret: `vapid_public_key` and `vapid_private_key` are uploaded
+# as Worker Secrets by the push-key step, and only the private key is sensitive.
+# The name is lowercase on purpose — Cloudflare binding names are case-sensitive
+# and the Worker reads `env.vapid_subject`.
+vapid_subject = "${VAPID_SUBJECT}"
+
+[build]
+command = "pnpm --prefix ../mail-vue install && pnpm --prefix ../mail-vue run build"

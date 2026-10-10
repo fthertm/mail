@@ -1,0 +1,1041 @@
+<template>
+  <div class="send" v-show="show">
+    <div class="write-box">
+      <div class="title">
+        <div class="title-left">
+          <span class="title-text">
+            <AppIcon name="compose" :size="24"/>
+          </span>
+          <span class="sender-name">{{ form.name }}</span>
+        </div>
+        <div @click="close" style="cursor: pointer;">
+          <Icon icon="material-symbols-light:close-rounded" width="22" height="22"/>
+        </div>
+      </div>
+      <div class="container" :style="{ gridTemplateRows: `repeat(${headerRows}, auto) 1fr auto` }">
+        <el-dropdown
+            class="write-sender"
+            popper-class="write-sender-popper"
+            trigger="click"
+            :show-timeout="0"
+            :hide-timeout="0"
+            @visible-change="senderVisibleChange"
+        >
+          <button class="write-sender-trigger" type="button" :aria-label="t('from')">
+            <span class="write-sender-label">{{ $t('from') }}</span>
+            <span class="write-sender-value">{{ form.sendEmail }}</span>
+            <Icon class="write-sender-caret" icon="mingcute:down-small-fill" width="18" height="18"/>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                  v-for="item in senderOptions"
+                  :key="item.accountId"
+                  :class="{ 'is-current': item.accountId === form.accountId }"
+                  @click="changeSender(item)"
+              >{{ item.email }}</el-dropdown-item>
+              <el-dropdown-item v-if="senderOptions.length === 0" disabled>{{ $t('noSendableAddress') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-input-tag  @add-tag="addTagChange" tag-type="primary" @input="inputChange" size="default" v-model="form.receiveEmail" >
+          <template #prefix>
+            <div class="item-title" >{{ $t('recipient') }}</div>
+            <el-select
+                ref="mySelect"
+                class="write-select"
+                popper-class="write-select"
+                :show-arrow="false"
+                :no-match-text="' '"
+                :no-data-text="' '"
+                @visible-change="selectStatusChange"
+                @change="selectChange"
+            >
+              <el-option
+                  v-for="item in selectRecipientList"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                  style="color: #999896;"
+              />
+            </el-select>
+          </template>
+          <template #suffix>
+            <div style="display: flex;margin-right: 3px;">
+              <button v-if="!ccVisible" class="cc-toggle" type="button" @click.stop="showCc = true">{{ $t('cc') }}</button>
+              <button v-if="!bccVisible" class="cc-toggle" type="button" @click.stop="showBcc = true">{{ $t('bcc') }}</button>
+              <Icon icon="fa7-solid:user-plus" width="20" height="20" class="add-contact" @click.stop="openContacts" />
+            </div>
+          </template>
+        </el-input-tag>
+        <el-input-tag v-if="ccVisible" @add-tag="value => addExtraTag('cc', value)" tag-type="primary" size="default" v-model="form.cc">
+          <template #prefix><div class="item-title">{{ $t('cc') }}</div></template>
+        </el-input-tag>
+        <el-input-tag v-if="bccVisible" @add-tag="value => addExtraTag('bcc', value)" tag-type="primary" size="default" v-model="form.bcc">
+          <template #prefix><div class="item-title">{{ $t('bcc') }}</div></template>
+        </el-input-tag>
+        <el-input v-model="form.subject" :placeholder="t('subject')" />
+        <tinyEditor :def-value="defValue" ref="editor" @change="change" @focus="focusChange" />
+        <div class="button-item">
+          <div class="att-add" @click="chooseFile">
+            <Icon
+                class="compose-attachment-icon"
+                icon="solar:paperclip-linear"
+                width="22"
+                height="22"
+            />
+          </div>
+          <div class="att-clear" @click="clearContent">
+            <Icon icon="icon-park-outline:clear-format" width="24" height="24 "/>
+          </div>
+          <div class="att-list">
+            <div class="att-item" v-for="(item,index) in form.attachments" :key="index">
+              <Icon v-bind="getIconByName(item.filename)"/>
+              <span class="att-filename">{{ item.filename }}</span>
+              <span class="att-size">{{ formatBytes(item.size) }}</span>
+              <Icon style="cursor: pointer;" icon="material-symbols-light:close-rounded" @click="delAtt(index)"
+                    width="22" height="22"/>
+            </div>
+          </div>
+          <div>
+            <el-button type="primary" @click="sendEmail" v-if="form.sendType === 'reply'">{{ $t('reply') }}</el-button>
+            <el-button type="primary" @click="sendEmail" v-else-if="form.sendType === 'forward'">{{ $t('forward') }}</el-button>
+            <el-button type="primary" @click="sendEmail" v-else>{{ $t('send') }}</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <el-dialog top="10vh" v-model="showContacts" @closed="clearSelectContact" :title="t('recentContacts')">
+      <el-table ref="contactsTabRef" row-key="email" :data="contacts" style="height: 445px">
+        <el-table-column type="selection" width="32" />
+        <el-table-column property="email" :label="t('emailAccount')" >
+          <template #default="props">
+            <div class="email-row">{{ props.row.email }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column width="55" label="" >
+          <template #default>
+            <div style="display: flex;">
+              <Icon icon="mage:user" style="color: var(--el-text-color-primary)" width="22" height="22" color="#606266" />
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="contacts-bottom">
+        <el-button type="default" @click="deleteContact">{{t('clear')}}</el-button>
+        <el-button type="primary" @click="chooseContact">{{t('selectContacts')}}</el-button>
+      </div>
+    </el-dialog>
+  </div>
+</template>
+<script setup>
+import tinyEditor from '@/components/tiny-editor/index.vue'
+import {h, nextTick, reactive, ref, toRaw, computed} from "vue";
+import {Icon} from "@iconify/vue";
+import {useUserStore} from "@/store/user.js";
+import {emailSend} from "@/request/email.js";
+import {isEmail} from "@/utils/verify-utils.js";
+import {useAccountStore} from "@/store/account.js";
+import {useEmailStore} from "@/store/email.js";
+import {fileToBase64, formatBytes} from "@/utils/file-utils.js";
+import {getIconByName} from "@/utils/icon-utils.js";
+import sendPercent from "@/components/send-percent/index.vue"
+import {resolvePrivateMailImages} from '@/utils/private-attachments.js'
+import {formatDetailDate} from "@/utils/day.js";
+import {useSettingStore} from "@/store/setting.js";
+import {userDraftStore} from "@/store/draft.js";
+import {useWriterStore} from "@/store/writer.js";
+import db from "@/db/db.js";
+import dayjs from "dayjs";
+import {useI18n} from "vue-i18n";
+import router from "@/router/index.js";
+import {ElMessageBox} from "element-plus";
+import {accountList} from "@/request/account.js";
+import {restoreDraftRecipients, validateCompose} from "@/utils/compose-validate.js";
+import {
+  composeSenderFields,
+  newComposeSender,
+  ownedAddressSet,
+  parseAddressList,
+  resolveDraftSender,
+  resolveReplySenderAccount,
+  sendableAddressList,
+  senderChoiceFor,
+} from "@/utils/sender-resolution.js";
+import {clearAuthenticatedSession} from '@/utils/session-state.js';
+
+defineExpose({
+  open,
+  openReply,
+  openForward,
+  openDraft,
+  sendEmail,
+  close,
+  isOpen: () => show.value,
+})
+
+const {t} = useI18n()
+const writerStore = useWriterStore();
+const draftStore = userDraftStore()
+const settingStore = useSettingStore()
+const emailStore = useEmailStore();
+const accountStore = useAccountStore()
+const editor = ref({})
+const userStore = useUserStore();
+const show = ref(false);
+const percent = ref(0)
+let percentMessage = null
+let sending = false
+let sendKey = ''
+let sendPayload = ''
+const defValue = ref('')
+const contactsTabRef = ref({})
+const showContacts = ref(false)
+const mySelect = ref()
+let selectStatus = false
+const backReply = reactive({
+  receiveEmail: [],
+  cc: [],
+  subject: '',
+  content: '',
+  sendType: ''
+})
+const form = reactive({
+  sendEmail: '',
+  receiveEmail: [],
+  cc: [],
+  bcc: [],
+  accountId: -1,
+  name: '',
+  subject: '',
+  content: '',
+  sendType: '',
+  text: '',
+  emailId: 0,
+  attachments: [],
+  draftId: null,
+})
+
+const selectRecipientList = ref([])
+const showCc = ref(false)
+const showBcc = ref(false)
+/**
+ * The identities the `From` dropdown may offer: owned, active, send-capable
+ * addresses as reported by the server. The selected value itself lives on
+ * `form.sendEmail`, so a list that is still loading can never change what the
+ * message is sent from.
+ */
+const senderOptions = ref([])
+const ccVisible = computed(() => showCc.value || form.cc.length > 0)
+const bccVisible = computed(() => showBcc.value || form.bcc.length > 0)
+const headerRows = computed(() => 3 + Number(ccVisible.value) + Number(bccVisible.value))
+
+const contacts = computed(() => writerStore.sendRecipientRecord.map(item => ({email: item})))
+
+function openContacts() {
+  showContacts.value = true
+  nextTick(() => {
+    form.receiveEmail.forEach(item => {
+      if (writerStore.sendRecipientRecord.includes(item)) {
+        contactsTabRef.value.toggleRowSelection({email: item});
+      }
+    })
+  })
+}
+
+function deleteContact() {
+  ElMessageBox.confirm(t('confirmDeletionOfContacts'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(() => {
+    const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
+    form.receiveEmail = form.receiveEmail.filter(item => !contactList.includes(item));
+    writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(item => !contactList.includes(item));
+  })
+}
+
+function chooseContact() {
+
+  const contactList = contactsTabRef.value.getSelectionRows().map(item => item.email);
+  contactList.forEach(item => {
+    if (!form.receiveEmail.includes(item)) {
+      form.receiveEmail.push(item);
+    }
+  })
+
+  form.receiveEmail = form.receiveEmail.filter(item => {
+    return contactList.includes(item) || !writerStore.sendRecipientRecord.includes(item);
+  });
+
+  showContacts.value = false
+}
+
+function clearSelectContact() {
+  contactsTabRef.value.clearSelection();
+}
+
+function selectChange(value) {
+  form.receiveEmail.push(value)
+}
+
+function selectStatusChange(status) {
+  selectStatus = status
+}
+
+const openSelect = () => {
+  mySelect.value.toggleMenu()
+}
+
+function inputChange(value) {
+
+  selectRecipientList.value = writerStore.sendRecipientRecord.filter(item => value && !form.receiveEmail.includes(item) && item.startsWith(value)).slice(0, 10);
+
+  if (!selectStatus && selectRecipientList.value.length > 0) {
+    openSelect()
+  }
+
+  if (selectStatus && selectRecipientList.value.length === 0) {
+    openSelect()
+  }
+
+}
+
+function addTagChange(val) {
+
+  const emails = Array.from(new Set(
+      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+  ));
+
+  form.receiveEmail.splice(form.receiveEmail.length - 1, 1)
+
+  let has = false
+  emails.forEach(email => {
+    if (isEmail(email) && !form.receiveEmail.includes(email)) {
+      form.receiveEmail.push(email)
+      has = true
+    }
+  })
+  if (selectStatus && has) openSelect()
+}
+
+function addExtraTag(key, value) {
+  const addresses = form[key]
+  // Element Plus adds the raw input as a tag before this callback. Replace it
+  // with validated, comma-separated entries just as the To input does.
+  addresses.splice(addresses.length - 1, 1)
+  value.split(/[,，]/).map(item => item.trim()).filter(Boolean).forEach((email) => {
+    if (isEmail(email) && !addresses.some(item => item.toLowerCase() === email.toLowerCase())) {
+      addresses.push(email)
+    }
+  })
+}
+
+function clearContent() {
+  ElMessageBox.confirm(t('clearContentConfirm'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(() => {
+    resetForm()
+  })
+
+}
+
+function delAtt(index) {
+  form.attachments.splice(index, 1);
+}
+
+function chooseFile() {
+  const doc = document.createElement("input")
+  doc.setAttribute("type", "file")
+  doc.multiple = true;
+  doc.click()
+  doc.onchange = async (e) => {
+
+    const fileList = e.target.files;
+
+    for (const file of fileList) {
+
+      const size = file.size
+      const filename = file.name
+      const contentType = file.type
+
+      const content = await fileToBase64(file)
+      form.attachments.push({content, filename, size, contentType})
+
+    }
+
+  }
+}
+
+async function sendEmail() {
+
+  if (!form.content) {
+    // The editor is only mounted while the composer is open; reading it
+    // defensively keeps a stray call from throwing before validation runs.
+    form.content = editor.value?.getContent ? editor.value.getContent() : form.content;
+  }
+
+  const problem = validateCompose({
+    recipientCount: form.receiveEmail.length,
+    subject: form.subject,
+    content: form.content,
+    attachmentCount: form.attachments.length,
+    manyType: form.manyType,
+    sending,
+  })
+
+  if (problem) {
+    ElMessage({
+      message: t(problem),
+      type: 'error',
+      plain: true,
+    })
+    return
+  }
+
+  percentMessage = ElMessage({
+    message: () => h(sendPercent, {value: percent.value, desc: t('sending')}),
+    dangerouslyUseHTMLString: true,
+    plain: true,
+    duration: 0,
+    customClass: 'message-bottom'
+  })
+
+  sending = true
+
+  show.value = false
+
+  // Captured before resetForm(): the sent reply/forward is inserted into the
+  // open conversation as soon as the API confirms.
+  const sentType = form.sendType
+
+  const payload = JSON.stringify(toRaw(form))
+  if (payload !== sendPayload) {
+    sendKey = crypto.randomUUID()
+    sendPayload = payload
+  }
+  emailSend({ ...toRaw(form), idempotencyKey: sendKey }, (e) => {
+    percent.value = Math.round((e.loaded * 98) / e.total)
+  }).then(emailList => {
+    const email = emailList[0]
+    emailList.forEach(item => {
+      emailStore.sendScroll?.addItem(item)
+    })
+
+    // Show the new message in the conversation thread straight away instead of
+    // waiting for the list to be refetched.
+    if ((sentType === 'reply' || sentType === 'forward') && email) {
+      emailStore.appendThreadMessage(email)
+    }
+
+    ElNotification({
+      title: t('sendSuccessMsg'),
+      type: "success",
+      message: h('span', {style: 'color: teal'}, email.subject),
+      position: 'bottom-right'
+    })
+
+    userStore.refreshUserInfo();
+
+    addRecipientRecord();
+
+    if (form.draftId) {
+      form.subject = ''
+      form.content = ''
+      form.receiveEmail = []
+      form.cc = []
+      form.bcc = []
+      draftStore.setDraft = {...toRaw(form)}
+    }
+
+    show.value = false
+    resetForm();
+  }).catch((e) => {
+    ElNotification({
+      title: t('sendFailMsg'),
+      type: e.code === 403 ? 'warning' : 'error',
+      message: h('span', {style: 'color: teal'}, e.message),
+      position: 'bottom-right'
+    })
+    if (e.code === 401) {
+      clearAuthenticatedSession();
+      router.replace('/login');
+    }
+    show.value = true
+    addRecipientRecord();
+  }).finally(() => {
+    percentMessage.close()
+    percent.value = 0
+    sending = false
+  })
+}
+
+function addRecipientRecord() {
+  const recipients = [...new Set([...form.receiveEmail, ...form.cc, ...form.bcc].map(email => email.toLowerCase()))]
+  writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(
+      email => !recipients.includes(email.toLowerCase())
+  );
+
+  writerStore.sendRecipientRecord.unshift(...form.receiveEmail, ...form.cc, ...form.bcc);
+  writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.slice(0, 500);
+}
+
+function resetForm() {
+  sendKey = ''
+  sendPayload = ''
+  form.receiveEmail = []
+  form.cc = []
+  form.bcc = []
+  showCc.value = false
+  showBcc.value = false
+  form.subject = ''
+  form.content = ''
+  form.manyType = null
+  form.attachments = []
+  form.sendType = ''
+  form.emailId = 0
+  form.draftId = null
+  backReply.content = ''
+  backReply.subject = ''
+  backReply.receiveEmail = []
+  backReply.cc = []
+  backReply.sendType = ''
+  editor.value.clearEditor()
+}
+
+function change(content, text) {
+  form.content = content;
+  form.text = text
+}
+
+function focusChange() {
+  if (selectStatus) openSelect()
+}
+
+function openForward(email) {
+  resetForm();
+
+  email.subject = email.subject || ''
+
+  form.subject = email.subject
+  form.sendType = 'forward'
+
+  defValue.value = ''
+
+  setTimeout(async () => {
+    const quotedHtml = email.content
+      ? await resolvePrivateMailImages(email.content, settingStore.settings.r2Domain)
+      : ''
+    // `.nova-quoted` lets the editor re-skin the quoted mail for dark mode.
+    defValue.value = `
+      <div class="nova-quoted">
+      ${quotedHtml || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
+      </div>
+    `
+    open()
+
+    nextTick(() => {
+      backReply.content = editor.value.getContent()
+      backReply.subject = form.subject
+      backReply.receiveEmail = [...form.receiveEmail]
+      backReply.cc = [...form.cc]
+      backReply.sendType = form.sendType
+    })
+
+  });
+}
+
+/**
+ * The user's owned addresses for sender resolution. The shared singleton already
+ * caches the first page (with the server's `canSend` verdict); only a cold cache
+ * triggers the request, and a failure degrades to whatever is already known.
+ */
+async function ownedAddressList() {
+  if (accountStore.addresses?.length) return accountStore.addresses
+  try {
+    const addresses = await accountList(0, 30)
+    accountStore.addresses = addresses
+    return addresses
+  } catch {
+    return accountStore.addresses || []
+  }
+}
+
+function setSenderOptions(addresses) {
+  senderOptions.value = sendableAddressList(addresses)
+  return senderOptions.value
+}
+
+/**
+ * Load (or refresh) the addresses the `From` dropdown may offer. Only addresses
+ * the server marked as send-capable reach the menu, so a disabled or
+ * domain-restricted address can never be picked.
+ */
+async function loadSenderOptions() {
+  return setSenderOptions(await ownedAddressList())
+}
+
+function senderVisibleChange(visible) {
+  // Refresh on open so an address added or disabled elsewhere is reflected
+  // before it can be chosen.
+  if (visible) loadSenderOptions()
+}
+
+/**
+ * Apply a manual `From` change to this message only.
+ *
+ * The stored Default Sender preference is changed exclusively from
+ * Settings → Account → Addresses; nothing in the composer writes it. The
+ * address and the account id always come from the same row, which is what the
+ * send API re-checks.
+ */
+function changeSender(item) {
+  const choice = senderChoiceFor(senderOptions.value, item?.accountId)
+  if (!choice) return
+  form.sendEmail = choice.sendEmail
+  form.accountId = choice.accountId
+  form.name = choice.name
+}
+
+function currentSenderAddress() {
+  return (accountStore.currentAccount?.email || userStore.user?.email || '').toLowerCase()
+}
+
+async function openReply(email, replyAll = false) {
+
+  resetForm();
+
+  email.subject = email.subject || ''
+
+  // Resolve the identity first: the same address that received the message must
+  // be the one it is answered from, and it also decides whose addresses are
+  // excluded from a reply-all.
+  const addresses = await ownedAddressList()
+  setSenderOptions(addresses)
+  const senderAccount = resolveReplySenderAccount(email, userStore.user, addresses, accountStore.currentAccount)
+  const senderAddress = (senderAccount?.email || currentSenderAddress()).toLowerCase()
+
+  const sender = String(email.sendEmail || '')
+  const mine = sender.toLowerCase() === senderAddress
+  if (replyAll && mine) {
+    form.receiveEmail.push(...parseAddressList(email.recipient))
+    form.cc.push(...parseAddressList(email.cc).filter(address => !form.receiveEmail.some(to => to.toLowerCase() === address.toLowerCase())))
+  } else {
+    form.receiveEmail.push(sender)
+  }
+  if (replyAll && !mine) {
+    // Never address the reply back to one of the user's own identities.
+    const excluded = ownedAddressSet(userStore.user, addresses, [senderAddress, sender])
+    for (const address of [...parseAddressList(email.recipient), ...parseAddressList(email.cc)]) {
+      const normalized = address.toLowerCase()
+      if (!excluded.has(normalized)) {
+        excluded.add(normalized)
+        form.cc.push(address)
+      }
+    }
+  }
+  form.subject = (
+      email.subject.startsWith('Re:') ||
+      email.subject.startsWith('Re：') ||
+      email.subject.startsWith('回复：') ||
+      email.subject.startsWith('回复:')) ? email.subject : 'Re: ' + email.subject
+  form.sendType = 'reply'
+  form.emailId = email.emailId
+
+  defValue.value = ''
+
+  setTimeout(async () => {
+    const quotedHtml = email.content
+      ? await resolvePrivateMailImages(email.content, settingStore.settings.r2Domain)
+      : ''
+    defValue.value = `
+    <div></div>
+    <div>
+    <br>
+        ${formatDetailDate(email.createTime)} ${email.name} &lt${email.sendEmail}&gt ${t('wrote')}:
+    </div>
+    <blockquote class="mceNonEditable nova-quoted" style="margin: 0 0 0 0.8ex;border-left: 1px solid rgb(204,204,204);padding-left: 1ex;">
+      <article>
+          ${quotedHtml || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
+      </article>
+    </blockquote>`
+    open(senderAccount)
+
+    nextTick(() => {
+      backReply.content = editor.value.getContent()
+      backReply.subject = form.subject
+      backReply.receiveEmail = [...form.receiveEmail]
+      backReply.cc = [...form.cc]
+      backReply.sendType = form.sendType
+    })
+  })
+
+}
+
+function open(preferredAccount) {
+  // A completely new Compose window starts from the effective default sender:
+  // the user's configured choice, then the valid primary address, then the first
+  // usable address. Reply and forward pass their own identity explicitly.
+  const fields = preferredAccount
+      ? composeSenderFields(preferredAccount, userStore.user)
+      : newComposeSender(userStore.user, accountStore.addresses, accountStore.currentAccount)
+  form.sendEmail = fields.sendEmail;
+  form.accountId = fields.accountId;
+  form.name = fields.name;
+  // The dropdown is populated from the same address list, and refreshed again
+  // when it is opened.
+  loadSenderOptions()
+  show.value = true;
+  editor.value.focus()
+}
+
+async function openDraft(draft) {
+  // The address list is the authority that decides whether the sender the draft
+  // stored is still usable.
+  const addresses = await ownedAddressList()
+  setSenderOptions(addresses)
+  Object.assign(form, {...draft})
+  Object.assign(form, restoreDraftRecipients(draft))
+  // The draft keeps the sender it stored; only one that is gone or can no longer
+  // send falls back to the effective default sender.
+  const sender = resolveDraftSender(draft, userStore.user, addresses, accountStore.currentAccount)
+  form.sendEmail = sender.sendEmail
+  form.accountId = sender.accountId
+  form.name = sender.name
+  showCc.value = form.cc.length > 0
+  showBcc.value = form.bcc.length > 0
+  defValue.value = ''
+  setTimeout(() => defValue.value = form.content)
+  show.value = true;
+  editor.value.focus()
+}
+
+function close() {
+
+  if (selectStatus) openSelect();
+
+  if (!form.content) {
+    form.content = editor.value.getContent();
+  }
+
+  if (form.draftId) {
+    draftStore.setDraft = {...toRaw(form)}
+    show.value = false
+    resetForm()
+    return;
+  }
+
+  if (!(form.content || form.subject || form.receiveEmail.length > 0 || form.cc.length > 0 || form.bcc.length > 0)) {
+    show.value = false
+    resetForm()
+    return;
+  }
+
+  if (backReply.sendType === 'reply' || backReply.sendType === 'forward') {
+    let subjectFlag = form.subject === backReply.subject
+    let contentFlag = editor.value.getContent() === backReply.content
+    let receiveFlag = form.receiveEmail.join(',') === backReply.receiveEmail.join(',')
+    if (backReply.sendType === 'forward' && form.receiveEmail.length === 0) {
+      receiveFlag = true;
+    }
+    const ccFlag = form.cc.join(',') === backReply.cc.join(',') && form.bcc.length === 0
+    if (subjectFlag && contentFlag && receiveFlag && ccFlag) {
+      resetForm();
+      close()
+      return;
+    }
+  }
+
+  ElMessageBox.confirm(t('saveDraftConfirm'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning',
+    distinguishCancelAndClose: true
+  }).then(async () => {
+    const formData = {...toRaw(form)};
+    delete formData.draftId
+    delete formData.attachments
+    formData.createTime = dayjs().utc().format('YYYY-MM-DD HH:mm:ss');
+    const draftId = await db.value.draft.add({...formData})
+    db.value.att.add({draftId, attachments: toRaw(form.attachments)})
+    draftStore.refreshList++
+    show.value = false
+    await nextTick(() => {
+      resetForm()
+    })
+  }).catch((action) => {
+    if (action === 'cancel') {
+      show.value = false
+      resetForm()
+    }
+  })
+
+}
+
+</script>
+<style>
+.write-select .el-select-dropdown__list {
+  padding: 4px 4px !important;
+}
+.write-select .el-select-dropdown__item {
+  padding: 0 10px 0 10px;
+}
+
+.write-select .el-select-dropdown {
+  min-width: 0 !important;
+}
+.cc-toggle {
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--el-text-color-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-toggle:hover { color: var(--el-color-primary); background: var(--nova-hover); }
+
+/* The From menu is teleported out of the scoped tree, so its selected state is
+   styled here alongside the other composer popper rules. */
+.write-sender-popper .el-dropdown-menu__item.is-current {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+.write-sender-popper .el-dropdown-menu__item {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>
+<style scoped lang="scss">
+.send {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .write-box {
+    background: var(--el-bg-color);
+    width: min(1367px, calc(100% - 80px));
+    box-shadow: var(--el-box-shadow-light);
+    border: 1px solid var(--el-border-color-light);
+    transition: var(--el-transition-duration);
+    padding: 15px;
+    border-radius: 16px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    @media (max-width: 1024px) {
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+      border: 0;
+      padding-top: 10px;
+    }
+
+    @media (min-width: 1025px) {
+      height: min(800px, calc(100vh - 60px));
+    }
+
+    .title {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+
+      .title-left {
+        align-items: center;
+        display: grid;
+        grid-template-columns: auto 1fr;
+      }
+
+      .title-text {
+      }
+
+      .sender-name {
+        margin-left: 8px;
+        font-weight: bold;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+
+
+      div {
+        display: flex;
+        align-items: center;
+      }
+    }
+
+    .container {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 15px;
+
+      .item-title {
+      }
+
+      /* The From selector reads as a line of metadata, not a form control: flat
+         until the pointer or keyboard reaches it, where it gains the same
+         subtle surface the rest of the app uses for interactive rows. The grid
+         item stays full width so the button can size to its address without a
+         circular max-width; the address itself truncates only on a narrow
+         composer. */
+      .write-sender-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: min(100%, 460px);
+        margin-left: -6px;
+        padding: 3px 6px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--el-text-color-primary);
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color var(--nova-motion-base) var(--nova-motion-ease);
+      }
+
+      .write-sender-trigger:hover,
+      .write-sender-trigger:focus-visible {
+        background: var(--light-ill);
+        outline: none;
+      }
+
+      .write-sender-label {
+        flex: 0 0 auto;
+        color: var(--el-text-color-secondary);
+        font-size: 13px;
+      }
+
+      .write-sender-value {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .write-sender-caret {
+        flex: 0 0 auto;
+        color: var(--el-text-color-secondary);
+      }
+
+      .button-item {
+        display: grid;
+        grid-template-columns: auto auto 1fr auto;
+
+        .att-add {
+          cursor: pointer;
+          color: var(--regular-text-color);
+        }
+
+        .compose-attachment-icon {
+          color: currentColor;
+          transition:
+            color var(--nova-motion-base) var(--nova-motion-ease),
+            opacity var(--nova-motion-base) var(--nova-motion-ease);
+        }
+
+        .att-add:hover {
+          color: var(--el-color-primary);
+        }
+
+        html.dark & .att-add {
+          color: #D1D1D6;
+        }
+
+        html.dark & .att-add:hover {
+          color: var(--el-color-primary);
+        }
+
+        .att-clear {
+          cursor: pointer;
+          margin-left: 10px;
+        }
+
+        .att-list {
+          display: grid;
+          gap: 5px;
+          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+          padding-left: 10px;
+          padding-right: 10px;
+          max-height: 110px;
+          overflow-y: auto;
+          @media (max-width: 450px) {
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          }
+
+          .att-item {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 5px;
+            height: 32px;
+            font-size: 14px;
+            padding: 4px 5px;
+            background: var(--light-ill);
+            border-radius: 4px;
+            .att-filename {
+              white-space: nowrap;
+              text-overflow: ellipsis;
+              overflow: hidden;
+            }
+          }
+        }
+      }
+    }
+  }
+
+}
+
+.email-row {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:deep(.el-dialog) {
+  width: 420px !important;
+  @media (max-width: 460px) {
+    width: calc(100% - 40px) !important;
+    margin-right: 20px !important;
+    margin-left: 20px !important;
+  }
+}
+
+.contacts-bottom {
+  display: flex;
+  justify-content: end;
+  margin-top: 10px;
+}
+
+.add-contact {
+  color: var(--regular-text-color)
+}
+
+.write-select {
+  position: absolute;
+  width: 300px;
+  left: 60px;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:deep(.el-input-tag__suffix) {
+  padding-right: 4px;
+}
+
+.icon {
+  cursor: pointer;
+}
+</style>

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+    <meta
+            id="theme-color-meta"
+            name="theme-color"
+            content="#FFFFFF"
+    />
+    <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Mail — your mail, your rules.">
+  <meta name="application-name" content="Mail">
+  <meta name="apple-mobile-web-app-title" content="Mail">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- iOS standalone status bar: only `default` (light) / `black` / `black-translucent`
+         are supported, and iOS reads it at launch. `theme-color` stays the runtime
+         source of truth; this is kept in sync with the saved theme so the next
+         launch matches, and defaults to `default` before the script runs. -->
+    <meta
+            id="apple-status-bar-meta"
+            name="apple-mobile-web-app-status-bar-style"
+            content="default"
+    />
+  <title>Mail</title>
+  <link rel="icon" href="/src/icons/svg/brand-mark.svg" type="image/svg+xml">
+  <link rel="icon" href="/icons/nova-mail-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/nova-mail-192.png">
+  <!-- Explicit rendering prevents the API script from racing Vue's lifecycle. -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    <script>
+        (() => {
+
+            let isDark = false
+            let mode = 'system'
+            let savedPalettes = null
+
+
+            try {
+
+                const uiStoreStr =
+                    localStorage.getItem('ui')
+
+                const uiStore =
+                    uiStoreStr
+                        ? JSON.parse(uiStoreStr)
+                        : {}
+
+                savedPalettes = uiStore
+
+
+                mode =
+                    ['light','dark','system']
+                        .includes(uiStore.themeMode)
+
+                        ? uiStore.themeMode
+
+                        : (
+                            uiStore.dark
+                                ? 'dark'
+                                : 'system'
+                        )
+
+
+                const systemDark =
+                    window.matchMedia(
+                        '(prefers-color-scheme: dark)'
+                    ).matches
+
+
+                isDark =
+                    mode === 'dark' ||
+                    (
+                        mode === 'system'
+                        &&
+                        systemDark
+                    )
+
+
+            } catch {
+
+
+                mode='system'
+
+
+                isDark =
+                    window.matchMedia(
+                        '(prefers-color-scheme: dark)'
+                    ).matches
+
+            }
+
+
+
+            const root =
+                document.documentElement
+
+
+            // Paint the persisted palette before Vue mounts. The store applies
+            // the full derived token set immediately afterwards; these core
+            // values prevent a default-colour flash on a customised theme.
+            const defaults = isDark
+                ? { accent: '#0A84FF', background: '#1C1D20', foreground: '#E5E7EB', surface: '#17191D', border: '#383A3F' }
+                : { accent: '#0A84FF', background: '#F5F6F8', foreground: '#1F2937', surface: '#FFFFFF', border: '#E5E7EB' }
+            const candidate = savedPalettes?.[isDark ? 'darkPalette' : 'lightPalette'] || {}
+            const hex = /^#[0-9a-f]{6}$/i
+            const palette = Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, hex.test(candidate[key]) ? candidate[key].toUpperCase() : fallback]))
+            const blend = (base, overlay, ratio) => {
+                const channels = (value) => [1, 3, 5].map((start) => Number.parseInt(value.slice(start, start + 2), 16))
+                const encode = (value) => Math.round(value).toString(16).padStart(2, '0')
+                const [r1, g1, b1] = channels(base)
+                const [r2, g2, b2] = channels(overlay)
+                return `#${encode(r1 + (r2 - r1) * ratio)}${encode(g1 + (g2 - g1) * ratio)}${encode(b1 + (b2 - b1) * ratio)}`
+            }
+            const surface = blend(palette.background, palette.surface, isDark ? .40 : .20)
+            const selected = blend(palette.background, palette.accent, isDark ? .22 : .10)
+            const initialTokens = {
+                '--nm-bg': palette.background,
+                '--nm-surface': surface,
+                '--nm-surface-elevated': palette.surface,
+                '--nm-accent': palette.accent,
+                '--nm-accent-subtle': selected,
+                '--nm-selected': selected,
+                '--nm-hover': blend(surface, palette.accent, isDark ? .08 : .045),
+                '--nova-accent': palette.accent,
+                '--nova-background': palette.background,
+                '--nova-foreground': palette.foreground,
+                '--nova-surface': palette.surface,
+                '--nova-border': palette.border,
+                '--nova-text-primary': palette.foreground,
+                '--el-color-primary': palette.accent,
+                '--settings-page-background': palette.background,
+                '--light-border': palette.border,
+                '--el-bg-color': palette.surface,
+                '--aside-backgound': surface,
+                '--aside-menu-active-background': selected,
+                '--nova-selected': selected,
+            }
+            Object.entries(initialTokens).forEach(([name, value]) => root.style.setProperty(name, value))
+
+
+            root.classList.toggle(
+                'dark',
+                isDark
+            )
+
+
+            root.style.colorScheme =
+                isDark
+                    ? 'dark'
+                    : 'light'
+
+
+
+            window.__NOVA_INITIAL_THEME__ = {
+
+                dark:isDark,
+
+                mode
+
+            }
+
+
+
+            const metaTag =
+                document.getElementById(
+                    'theme-color-meta'
+                )
+                ||
+                document.querySelector(
+                    'meta[name="theme-color"]'
+                )
+
+
+            // First paint only. Login uses artwork-matched status-bar colours;
+            // mailbox pages continue to derive the value from the phone-header
+            // token once the stylesheet is available.
+            const isLoginPath = window.location.pathname === '/login'
+            let mobileHeaderBg = isLoginPath
+                ? (isDark ? '#10243f' : '#dbeafe')
+                : (isDark ? '#17191d' : '#FFFFFF')
+
+
+            try {
+
+                const token =
+                    getComputedStyle(root)
+                        .getPropertyValue(
+                            '--nova-mobile-header-bg'
+                        )
+                        .trim()
+
+
+                if (!isLoginPath && token && !token.includes('var(')) {
+
+                    mobileHeaderBg = token
+
+                }
+
+            } catch {
+
+                // Stylesheet not ready — keep the fallback above.
+
+            }
+
+
+            metaTag?.setAttribute(
+                'content',
+                mobileHeaderBg
+            )
+
+
+            const statusBarMeta =
+                document.getElementById(
+                    'apple-status-bar-meta'
+                )
+
+
+            // iOS only supports `default` / `black` / `black-translucent`, and
+            // reads this once at launch. Login uses an opaque style so its
+            // status bar remains a solid artwork-matched colour.
+            statusBarMeta?.setAttribute(
+                'content',
+                isLoginPath ? (isDark ? 'black' : 'default') : (isDark ? 'black-translucent' : 'default')
+            )
+
+
+        })()
+    </script>
+</head>
+<style>
+    /* Pre-stylesheet chrome. `--nova-mobile-header-bg` is defined in style.css;
+       until it loads these fallbacks keep the first paint aligned with the phone
+       header (dark grey #17191d, never pure black). */
+    html {
+        background: var(--nova-mobile-header-bg, #FFFFFF);
+    }
+
+    html.dark {
+        background: var(--nova-mobile-header-bg, #17191d);
+    }
+
+    body {
+        background:inherit;
+    }
+    #loading-first {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 500;
+        background: var(--nova-mobile-header-bg, #ffffff);
+    }
+
+    html.dark #loading-first {
+        background: var(--nova-mobile-header-bg, #17191d);
+    }
+  .loading-hide {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .loading-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .loading-image {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+  }
+
+  .loading-progress {
+    position: relative;
+    width: 64px;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(64, 158, 255, 0.18);
+  }
+
+  .loading-progress::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: #409EFF;
+    transform: scaleX(0);
+    transform-origin: left center;
+    animation: loading-progress-grow 2.4s linear forwards;
+  }
+
+  .loading-progress::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 24px;
+    height: 100%;
+    border-radius: inherit;
+    background: rgba(64, 158, 255, 0.45);
+    filter: blur(4px);
+    transform: translateX(-24px);
+    animation: loading-progress-peg 2.4s linear forwards;
+  }
+
+  .loading-complete .loading-progress::before {
+    animation: none;
+    transform: scaleX(1);
+    transition: transform 200ms linear;
+  }
+
+  .loading-complete .loading-progress::after {
+    animation: none;
+    transform: translateX(60px);
+    transition: transform 200ms linear;
+  }
+
+  @keyframes loading-progress-grow {
+    0% {
+      transform: scaleX(0);
+    }
+    100% {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes loading-progress-peg {
+    0% {
+      transform: translateX(-24px);
+    }
+    100% {
+      transform: translateX(60px);
+    }
+  }
+</style>
+<body>
+<div id="loading-first" >
+  <div class="loading-icon">
+    <img class="loading-image" src="/icons/nova-mail-192.png" alt="Mail">
+    <div class="loading-progress" aria-hidden="true"></div>
+  </div>
+</div>
+<div id="app"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

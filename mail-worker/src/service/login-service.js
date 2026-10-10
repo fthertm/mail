@@ -1,0 +1,340 @@
+import BizError from '../error/biz-error';
+import userService from './user-service';
+import emailUtils from '../utils/email-utils';
+import { isDel, settingConst, userConst } from '../const/entity-const';
+import JwtUtils from '../utils/jwt-utils';
+import { v4 as uuidv4 } from 'uuid';
+import KvConst from '../const/kv-const';
+import constant from '../const/constant';
+import userContext from '../security/user-context';
+import verifyUtils from '../utils/verify-utils';
+import accountService from './account-service';
+import settingService from './setting-service';
+import saltHashUtils from '../utils/crypto-utils';
+import cryptoUtils from '../utils/crypto-utils';
+import turnstileService from './turnstile-service';
+import roleService from './role-service';
+import regKeyService from './reg-key-service';
+import dayjs from 'dayjs';
+import { toUtc } from '../utils/date-uitil';
+import { t } from '../i18n/i18n.js';
+import verifyRecordService from './verify-record-service';
+import rateLimitUtils from '../utils/rate-limit-utils';
+import orm from '../entity/orm';
+import user from '../entity/user';
+import { and, eq } from 'drizzle-orm';
+import sessionService from './session-service';
+import securityAlertService from './security-alert-service';
+import { hasConfiguredDomain } from '../utils/configured-domains';
+
+const loginService = {
+
+	async register(c, params, oauth = false) {
+
+		if (!oauth) {
+			await rateLimitUtils.register(c);
+		}
+
+		let { email, password, token, code } = params;
+		email = emailUtils.normalizeEmail(email);
+
+		let { regKey, register, registerVerify, regVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c);
+
+		// OAuth is already verified by the provider; still honor closed registration.
+		if (oauth) {
+			registerVerify = settingConst.registerVerify.CLOSE;
+		}
+
+		if (register === settingConst.register.CLOSE) {
+			throw new BizError(t('regDisabled'));
+		}
+
+		if (!verifyUtils.isEmail(email)) {
+			throw new BizError(t('notEmail'));
+		}
+
+		if (emailUtils.getName(email).length < minEmailPrefix) {
+			throw new BizError(t('minEmailPrefix', { msg: minEmailPrefix } ));
+		}
+
+		if (emailPrefixFilter.some(content => emailUtils.getName(email).includes(content)))  {
+			throw new BizError(t('banEmailPrefix'));
+		}
+
+		if (emailUtils.getName(email).length > 64) {
+			throw new BizError(t('emailLengthLimit'));
+		}
+
+		if (password.length > 30) {
+			throw new BizError(t('pwdLengthLimit'));
+		}
+
+		if (password.length < 6) {
+			throw new BizError(t('pwdMinLength'));
+		}
+
+		if (!hasConfiguredDomain(c.env.domain, emailUtils.getDomain(email))) {
+			throw new BizError(t('notEmailDomain'));
+		}
+
+		let type = null;
+		let regKeyId = 0;
+
+		if (regKey === settingConst.regKey.OPEN) {
+			const result = await this.handleOpenRegKey(c, code, email);
+			type = result?.type;
+			regKeyId = result?.regKeyId;
+		}
+
+		if (regKey === settingConst.regKey.OPTIONAL) {
+			const result = await this.handleOpenOptional(c, code, email);
+			type = result?.type;
+			regKeyId = result?.regKeyId;
+		}
+
+		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
+
+		if (accountRow && accountRow.isDel === isDel.DELETE) {
+			throw new BizError(t('isDelUser'));
+		}
+
+		if (accountRow) {
+			throw new BizError(t('isRegAccount'));
+		}
+
+		let defType = null;
+		const resolveRole = async () => {
+			if (!type) defType = (await roleService.selectDefaultRole(c)).roleId;
+			const roleRow = await roleService.selectById(c, type || defType);
+			if (!roleService.hasAvailDomainPerm(roleRow.availDomain, email)) {
+				throw new BizError(t(type ? 'noDomainPermRegKey' : 'noDomainPermReg'), 403);
+			}
+			return roleRow;
+		};
+		await resolveRole();
+
+		let regVerifyOpen = false;
+
+		if (registerVerify === settingConst.registerVerify.OPEN) {
+			regVerifyOpen = true;
+			await turnstileService.verify(c, token);
+		}
+
+		if (registerVerify === settingConst.registerVerify.COUNT) {
+			regVerifyOpen = await verifyRecordService.isOpenRegVerify(c, regVerifyCount);
+			if (regVerifyOpen) {
+				await turnstileService.verify(c, token);
+			}
+		}
+
+		const { salt, hash } = await saltHashUtils.hashPassword(password);
+
+		let userId;
+		if (type) {
+			const userRow = await regKeyService.redeemAndCreateUser(c, { code, email, password: hash, salt });
+			if (userRow) {
+				userId = userRow.userId;
+			} else if (regKey === settingConst.regKey.OPEN) {
+				throw new BizError(t('noRegKeyCount'));
+			} else {
+				// Optional keys may be exhausted by a concurrent registration. Fall
+				// back to the ordinary default-role registration path.
+				type = null;
+				regKeyId = 0;
+				defType = null;
+				await resolveRole();
+			}
+		}
+
+		if (!userId) {
+			userId = await userService.insert(c, { email, regKeyId, password: hash, salt, type: type || defType });
+			await accountService.insert(c, { userId, email, name: emailUtils.getName(email) });
+		}
+
+		await userService.updateUserInfo(c, userId, true);
+
+		if (registerVerify === settingConst.registerVerify.COUNT && !regVerifyOpen) {
+			const row = await verifyRecordService.increaseRegCount(c);
+			return { regVerifyOpen: row.count >= regVerifyCount };
+		}
+
+		return { regVerifyOpen };
+
+	},
+
+	async registerVerify() {
+
+	},
+
+	async handleOpenRegKey(c, code, email) {
+
+		if (!code) {
+			throw new BizError(t('emptyRegKey'));
+		}
+
+		const regKeyRow = await regKeyService.selectByCode(c, code);
+
+		if (!regKeyRow) {
+			throw new BizError(t('notExistRegKey'));
+		}
+
+		if (regKeyRow.count <= 0) {
+			throw new BizError(t('noRegKeyCount'));
+		}
+
+		const today = toUtc().tz('Asia/Shanghai').startOf('day');
+		const expireTime = toUtc(regKeyRow.expireTime).tz('Asia/Shanghai').startOf('day');
+
+		if (expireTime.isBefore(today)) {
+			throw new BizError(t('regKeyExpire'));
+		}
+
+		const roleRow = await roleService.selectById(c, regKeyRow.roleId);
+		await roleService.assertCanAssignRole(c, regKeyRow.userId, { email }, roleRow);
+
+		return { type: regKeyRow.roleId, regKeyId: regKeyRow.regKeyId };
+	},
+
+	async handleOpenOptional(c, code, email) {
+
+		if (!code) {
+			return null;
+		}
+
+		const regKeyRow = await regKeyService.selectByCode(c, code);
+
+		if (!regKeyRow) {
+			return null;
+		}
+
+		const today = toUtc().tz('Asia/Shanghai').startOf('day');
+		const expireTime = toUtc(regKeyRow.expireTime).tz('Asia/Shanghai').startOf('day');
+
+		if (regKeyRow.count <= 0 || expireTime.isBefore(today)) {
+			return null;
+		}
+
+		const roleRow = await roleService.selectById(c, regKeyRow.roleId);
+		try {
+			await roleService.assertCanAssignRole(c, regKeyRow.userId, { email }, roleRow);
+		} catch {
+			return null;
+		}
+
+		return { type: regKeyRow.roleId, regKeyId: regKeyRow.regKeyId };
+	},
+
+	async login(c, params, noVerifyPwd = false) {
+
+		let { email, password, token, device_id, pwa } = params;
+		email = emailUtils.normalizeEmail(email);
+
+		if ((!email || !password) && !noVerifyPwd) {
+			throw new BizError(t('emailAndPwdEmpty'));
+		}
+
+		// Rate-limit password login only (OAuth uses createSession directly).
+		// Browser navigation to the login page is protected by Cloudflare's
+		// Managed Challenge. Keep the API path independent from the Turnstile
+		// widget so a solved edge challenge does not require a second token.
+		if (!noVerifyPwd) {
+			await rateLimitUtils.login(c);
+		}
+
+		const userRow = await userService.selectByEmailIncludeDel(c, email);
+
+		if (!userRow) {
+			throw new BizError(t('notExistUser'));
+		}
+
+		if (userRow.isDel === isDel.DELETE) {
+			throw new BizError(t('isDelUser'));
+		}
+
+		if (userRow.status === userConst.status.BAN) {
+			throw new BizError(t('isBanUser'));
+		}
+
+		if (!noVerifyPwd && !await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
+			throw new BizError(t('IncorrectPwd'));
+		}
+		if (!noVerifyPwd && cryptoUtils.isLegacyPasswordHash(userRow.password)) {
+			const { salt, hash } = await cryptoUtils.hashPassword(password);
+			const upgraded = await orm(c).update(user).set({ password: hash, salt })
+				.where(and(eq(user.userId, userRow.userId), eq(user.password, userRow.password)))
+				.returning({ userId: user.userId }).get();
+			if (!upgraded) {
+				// A concurrent password change invalidates the credentials we just checked.
+				throw new BizError(t('IncorrectPwd'));
+			}
+			userRow.password = hash;
+			userRow.salt = salt;
+		}
+
+		return await this.createSession(c, userRow, { deviceId: device_id, pwa });
+	},
+
+	async createSession(c, userRow, metadata = {}) {
+		if (!userRow || userRow.isDel === isDel.DELETE) {
+			throw new BizError(t('notExistUser'));
+		}
+
+		if (userRow.status === userConst.status.BAN) {
+			throw new BizError(t('isBanUser'));
+		}
+
+		const uuid = uuidv4();
+		const jwt = await JwtUtils.generateToken(
+			c,
+			{ userId: userRow.userId, token: uuid },
+			constant.TOKEN_EXPIRE
+		);
+
+		let authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userRow.userId, { type: 'json' });
+
+		if (authInfo && emailUtils.sameEmail(authInfo.user.email, userRow.email)) {
+
+			if (authInfo.tokens.length > 10) {
+				authInfo.tokens.shift();
+			}
+
+			authInfo.tokens.push(uuid);
+
+		} else {
+
+			authInfo = {
+				tokens: [],
+				user: userRow,
+				refreshTime: dayjs().toISOString()
+			};
+
+			authInfo.tokens.push(uuid);
+
+		}
+
+		await userService.updateUserInfo(c, userRow.userId);
+
+		await c.env.kv.put(KvConst.AUTH_INFO + userRow.userId, JSON.stringify(authInfo), { expirationTtl: constant.TOKEN_EXPIRE });
+		const created = await sessionService.create(c, userRow.userId, uuid, metadata);
+		if (created.isNewDevice) {
+			const session = await c.env.db.prepare('SELECT * FROM auth_session WHERE session_id = ?').bind(created.sessionId).first();
+			securityAlertService.notifyNewDevice(c, userRow, session).catch((error) => console.warn('Mail: security alert failed', error.message));
+		}
+		return jwt;
+	},
+
+	async logout(c, userId) {
+		const token = await userContext.getToken(c);
+		const authInfo = await c.env.kv.get(KvConst.AUTH_INFO + userId, { type: 'json' });
+		if (authInfo?.tokens) {
+			const index = authInfo.tokens.findIndex(item => item === token);
+			if (index > -1) authInfo.tokens.splice(index, 1);
+			await c.env.kv.put(KvConst.AUTH_INFO + userId, JSON.stringify(authInfo));
+		}
+		const session = c.get('session');
+		if (session) await c.env.db.prepare('UPDATE auth_session SET revoked_at = ? WHERE session_id = ? AND user_id = ?').bind(Date.now(), session.session_id, userId).run();
+	}
+
+};
+
+export default loginService;

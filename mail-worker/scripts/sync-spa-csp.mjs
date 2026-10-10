@@ -29,9 +29,12 @@ export const CSP_MODULE = resolve(HERE, '..', 'src', 'security', 'spa-csp.js');
 
 // The same shape the browser and the unit test use: the body of every inline
 // <script>. External <script src> tags have an empty body and are ignored.
+// The same shape the browser and the unit test use: the body of every inline
+// <script>. External <script src> tags have an empty body and are ignored.
 const INLINE_SCRIPT_RE = /<script((?:\s[^>]*)?)>([\s\S]*?)<\/script>/gi;
 // Veri blokları (ör. JSON-LD) çalıştırılmaz, CSP script-src'den etkilenmez, hash'e girmez.
 const DATA_BLOCK_RE = /type\s*=\s*["']application\/ld\+json["']/i;
+const HASH_LITERAL_RE = /'sha256-[A-Za-z0-9+/]+={0,2}'/g;
 
 /** Base64 sha256 of the single inline first-paint script in `html`. */
 export function inlineScriptHash(html) {

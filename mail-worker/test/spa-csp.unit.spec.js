@@ -8,8 +8,10 @@ describe('SPA Content-Security-Policy', () => {
 	it('allows only the fixed first-paint inline script', () => {
 		const path = fileURLToPath(new URL('../../mail-vue/index.html', import.meta.url));
 		const html = readFileSync(path, 'utf8');
-		const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-			.map(match => match[1]).filter(Boolean);
+		const inline = [...html.matchAll(/<script((?:\s[^>]*)?)>([\s\S]*?)<\/script>/gi)]
+			.filter(match => !/type\s*=\s*["']application\/ld\+json["']/i.test(match[1]))
+			.map(match => match[2])
+			.filter(Boolean);
 		expect(inline).toHaveLength(1);
 		const hash = createHash('sha256').update(inline[0]).digest('base64');
 		expect(SPA_CSP).toContain(`'sha256-${hash}'`);

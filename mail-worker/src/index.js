@@ -1,0 +1,49 @@
+import app from './hono/webs';
+import { email } from './email/email';
+import userService from './service/user-service';
+import verifyRecordService from './service/verify-record-service';
+import emailService from './service/email-service';
+import kvObjService from './service/kv-obj-service';
+import oauthService from './service/oauth-service';
+import analysisService from './service/analysis-service';
+import { withSpaCsp } from './security/spa-csp';
+import storageCleanupService from './service/storage-cleanup-service';
+export default {
+	 async fetch(req, env, ctx) {
+
+		const url = new URL(req.url)
+
+		if (url.pathname.startsWith('/api/')) {
+			url.pathname = url.pathname.replace('/api', '')
+			req = new Request(url.toString(), req)
+			return app.fetch(req, env, ctx);
+		}
+
+		 // Private mail attachments are only served by the authenticated routes
+		 // (/api/oss/<key> and /api/attachments/<id>). A bare /attachments/…
+		 // path is not an API call, so it must never reach storage.
+		 if (url.pathname.startsWith('/attachments/')) {
+			 return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } });
+		 }
+		 if (url.pathname.startsWith('/static/')) {
+			 return await kvObjService.toObjResp( { env }, url.pathname.substring(1));
+		 }
+
+		return withSpaCsp(await env.assets.fetch(req));
+	},
+	email: email,
+	async scheduled(c, env, ctx) {
+		if (c.cron === '*/30 * * * *') {
+			await analysisService.refreshEchartsCache({ env })
+			return;
+		}
+
+		await verifyRecordService.clearRecord({ env })
+		await userService.resetDaySendCount({ env })
+		await emailService.completeReceiveAll({ env })
+		await emailService.autoClean({ env })
+		await analysisService.refreshEchartsCache({ env })
+		await oauthService.clearNoBindOathUser({ env })
+		await storageCleanupService.process({ env })
+	},
+};

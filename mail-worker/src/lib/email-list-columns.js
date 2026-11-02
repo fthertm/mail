@@ -1,0 +1,54 @@
+import { getTableColumns, sql } from 'drizzle-orm';
+import email from '../entity/email';
+
+export const EMAIL_LIST_TEXT_LEN = 300;
+
+/** 去掉换行/回车/制表符，并压缩连续空格、标签间空白 */
+function sqlStripWhitespace(column) {
+	return sql`trim(replace(replace(replace(replace(replace(replace(
+		coalesce(${column}, ''),
+		char(13), ''),
+		char(10), ''),
+		char(9), ' '),
+		'  ', ' '),
+		'  ', ' '),
+		'> <', '><'))`;
+}
+
+/**
+ * 完整查询：全部字段。
+ *
+ * `auth_results` and `bimi_selector` are server-internal inputs to the sender
+ * avatar resolver (lib/bimi.js, service/sender-avatar-service.js); they are
+ * stripped here so no API response can leak them.
+ */
+const { authResults: _authResults, bimiSelector: _bimiSelector, ...safeEmailColumns } = getTableColumns(email);
+export const emailListColumns = safeEmailColumns;
+
+/** 摘要查询：列表 + 详情头部；有 text 则不读 content，没有才查 content（去空白），响应里不返回 content */
+export const emailBriefColumns = {
+	emailId: email.emailId,
+	sendEmail: email.sendEmail,
+	name: email.name,
+	subject: email.subject,
+	code: email.code,
+	recipient: email.recipient,
+	toEmail: email.toEmail,
+	type: email.type,
+	status: email.status,
+	message: email.message,
+	unread: email.unread,
+	createTime: email.createTime,
+	isDel: email.isDel,
+	// The renderer is chosen from this value, and the list preview needs it too:
+	// markdown must not be shown with its syntax characters.
+	bodyType: email.bodyType,
+	// The Inbox is rendered one row per conversation, so the client needs the
+	// conversation key on brief rows too (kept on A7 upgrades / realtime upserts).
+	threadId: email.threadId,
+	// Trash state travels with the brief row as well, so a client can tell a
+	// hidden message apart from a visible one before it fetches the full body.
+	trashed: email.trashed,
+	content: sql`CASE WHEN trim(coalesce(${email.text}, '')) != '' THEN NULL ELSE ${sqlStripWhitespace(email.content)} END`.as('content'),
+	text: sql`substr(coalesce(${email.text}, ''), 1, ${EMAIL_LIST_TEXT_LEN})`.as('text'),
+};

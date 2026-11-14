@@ -365,7 +365,7 @@
         <div class="settings-row">
           <span>{{ $t('author') }}</span>
           <a class="about-link" href="https://github.com/fthertm" target="_blank" rel="noopener noreferrer" aria-label="Open GitHub" title="Open GitHub">
-            faith
+            fatih
           </a>
         </div>
         <div class="settings-row">

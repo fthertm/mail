@@ -173,7 +173,7 @@
         </el-button>
       </div>
     </el-dialog>
-    <footer class="login-copyright">© {{ new Date().getFullYear() }} Mail<br>Hosted with ❤️ by <a href="https://fatihertem.com" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">faith</a></footer>
+    <footer class="login-copyright">© {{ new Date().getFullYear() }} Mail<br>Hosted with ❤️ by <a href="https://fatihertem.com" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">fatih</a></footer>
   </div>
 </template>
 

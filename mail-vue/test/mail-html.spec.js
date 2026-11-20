@@ -406,3 +406,68 @@ describe('looksLikeMarkdownDocument', () => {
     expect(looksLikeMarkdownDocument('')).toBe(false)
   })
 })
+
+describe('stylesheet breakout', () => {
+  // Entities without `;` survive the CSS parser, which splits declarations on
+  // `;`, and are still decoded inside SVG/MathML <style>.
+  const encode = value => value.replace(/&/g, '&amp').replace(/</g, '&lt').replace(/>/g, '&gt')
+  const breakout = inner => `<svg><style>p{color:red${encode(`</style>${inner}`)}}</style></svg>`
+  const pixel = '<img srcset="https://tracker.example/pixel.gif 1x">'
+
+  /** Every element the final markup would produce, as the frame would parse it. */
+  function rendered(html) {
+    return new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html').body
+  }
+
+  it('does not restore a stylesheet that came from an SVG <style>', () => {
+    const html = sanitizeMailHtml(`<p>hi</p>${breakout(pixel)}`)
+    const body = rendered(html)
+
+    expect(body.querySelector('img')).toBeNull()
+    expect(body.querySelector('[srcset]')).toBeNull()
+    expect(html).not.toContain('tracker.example')
+  })
+
+  it('does not restore a stylesheet that came from a MathML <style>', () => {
+    const html = sanitizeMailHtml(`<math><style>p{color:red${encode(`</style>${pixel}`)}}</style></math>`)
+
+    expect(rendered(html).querySelector('img')).toBeNull()
+  })
+
+  it('survives the nested payload that defeated both prepareMailBody passes', () => {
+    const { html } = prepareMailBody({ html: `<p>hello</p>${breakout(breakout(pixel))}` })
+    const body = rendered(html)
+
+    expect(body.querySelector('[srcset]')).toBeNull()
+    expect(html).not.toContain('tracker.example')
+  })
+
+  it('keeps the meta-refresh variant out of the frame', () => {
+    const { html } = prepareMailBody({
+      html: breakout(breakout('<meta http-equiv="refresh" content="0,url=https://evil.example/">')),
+    })
+
+    expect(rendered(html).querySelector('meta')).toBeNull()
+  })
+
+  it('drops CSS values and selectors that contain "<"', () => {
+    expect(sanitizeMailHtml('<style>p{color:red</x>}</style><p>x</p>')).not.toContain('<style>')
+    expect(sanitizeMailHtml('<style>p</x>{color:red}</style><p>x</p>')).not.toContain('<style>')
+  })
+
+  it('still keeps an ordinary HTML stylesheet', () => {
+    const html = sanitizeMailHtml('<style>.a > b { color: #333; }</style><p class="a"><b>x</b></p>')
+
+    expect(html).toContain('<style>.a > b{color: #333}</style>')
+  })
+
+  it('strips srcset and <source> even if they reach remote blocking', () => {
+    const { html } = blockRemoteResources(
+      `${pixel}<picture><source srcset="https://tracker.example/a.webp"><img src="/local.png"></picture>`
+    )
+
+    expect(html).not.toContain('srcset')
+    expect(html).not.toContain('<source')
+    expect(html).toContain('/local.png')
+  })
+})

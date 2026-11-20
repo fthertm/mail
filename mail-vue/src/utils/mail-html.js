@@ -96,7 +96,9 @@ function sanitizeInlineStyle(style) {
 
     const property = declaration.slice(0, separator).trim().toLowerCase()
     const value = declaration.slice(separator + 1).trim()
-    const unsafeValue = /(?:expression\s*\(|url\s*\(|@import|javascript:|vbscript:|behavior\s*:|-moz-binding)/i.test(value)
+    // `<` is never needed in an allowed value, and it is the only way for
+    // restored stylesheet text to close its `<style>` element early.
+    const unsafeValue = /(?:expression\s*\(|url\s*\(|@import|javascript:|vbscript:|behavior\s*:|-moz-binding|<)/i.test(value)
 
     return ALLOWED_STYLE_PROPERTIES.has(property) && !unsafeValue ? `${property}: ${value}` : ''
   }).filter(Boolean).join('; ')
@@ -123,7 +125,7 @@ function sanitizeStyleSheet(sheet) {
   )
   const selectorIsSafe = (selector) => (
     selector.length <= 1000
-    && !/[{};@]/.test(selector)
+    && !/[{};@<]/.test(selector)
     && !/(?:url\s*\(|expression\s*\(|behavior\s*:|-moz-binding)/i.test(selector)
   )
 
@@ -183,14 +185,24 @@ function installHooks() {
   })
 }
 
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
+
 function parkSafeStyleSheets(source) {
   const root = parseFragment(source)
   if (!root) return { html: source, styles: new Map() }
 
   const styles = new Map()
   root.querySelectorAll('style').forEach((style, index) => {
+    // An SVG/MathML <style> is parsed as foreign content: its text decodes
+    // entities, so `&lt;/style&gt;` becomes a literal `</style>`. Those
+    // stylesheets are never restored; only real HTML <style> rawtext is.
+    if (style.namespaceURI !== HTML_NAMESPACE) {
+      style.remove()
+      return
+    }
+
     const css = sanitizeStyleSheet(style.textContent)
-    if (!css) {
+    if (!css || css.includes('<')) {
       style.remove()
       return
     }
@@ -232,9 +244,13 @@ export function sanitizeMailHtml(html, { allowCodeControls = false } = {}) {
     RETURN_DOM_FRAGMENT: false,
   })
 
-  return sanitized.replace(/<span data-nova-mail-style-token="([a-z0-9-]+)"><\/span>/gi, (_match, token) => (
-    styles.has(token) ? `<style>${styles.get(token)}</style>` : ''
-  ))
+  // The stylesheet is concatenated after DOMPurify has run, so it must not be
+  // able to contain markup. `parkSafeStyleSheets` already guarantees this;
+  // re-check here so the invariant holds at the point it matters.
+  return sanitized.replace(/<span data-nova-mail-style-token="([a-z0-9-]+)"><\/span>/gi, (_match, token) => {
+    const css = styles.get(token)
+    return css && !css.includes('<') ? `<style>${css}</style>` : ''
+  })
 }
 
 /* -------------------------------------------------------- external content */
@@ -264,6 +280,12 @@ export function blockRemoteResources(html) {
   if (!root) return { html: String(html || ''), blocked: 0 }
 
   let blocked = 0
+
+  // `srcset` is removed by the sanitizer and never parked or restored. Strip it
+  // here too so remote blocking does not depend on that one layer holding.
+  // They are not counted as blocked because "load images" cannot restore them.
+  root.querySelectorAll('[srcset]').forEach(node => node.removeAttribute('srcset'))
+  root.querySelectorAll('source').forEach(node => node.remove())
 
   root.querySelectorAll('img').forEach((img) => {
     const src = img.getAttribute('src')

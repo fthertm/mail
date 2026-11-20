@@ -6,6 +6,7 @@ const en = {
 	emptyEmail: 'Email cannot be empty',
 	emptyAccountId: 'accountId cannot be empty',
 	notEmail: 'Invalid email',
+	plusAddressReg: 'Addresses containing "+" cannot be registered. Sign in and add them to your account instead',
 	notExistDomain: 'Email domain does not exist',
 	isDelAccount: 'This Email has been deleted',
 	isRegAccount: 'This Email is already registered',

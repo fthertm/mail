@@ -53,6 +53,15 @@ const loginService = {
 			throw new BizError(t('notEmail'));
 		}
 
+		// Mail to `name+tag@domain` falls back to the owner of `name@domain` when
+		// no exact account exists, and an exact match always wins. Registering a
+		// plus-address would therefore let anyone claim (or pre-claim) another
+		// user's tagged mail. `/account/add` only allows plus-addresses for the
+		// owner of the base address; a brand-new account can never own one.
+		if (emailUtils.getName(email).includes('+')) {
+			throw new BizError(t('plusAddressReg'));
+		}
+
 		if (emailUtils.getName(email).length < minEmailPrefix) {
 			throw new BizError(t('minEmailPrefix', { msg: minEmailPrefix } ));
 		}

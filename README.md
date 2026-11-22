@@ -11,7 +11,7 @@ Modern self-hosted webmail client on Cloudflare Workers.
 
 Mail is a self-hosted webmail client that runs entirely on Cloudflare: a Vue 3 single-page app served by a Hono-based Worker, with D1, KV and R2 for storage. It receives mail through Cloudflare Email Workers, sends through Resend, and supports multiple addresses per account, Web Push notifications and PWA install.
 
-This project is derived from [beihaime/nova-mail](https://github.com/beihaime/nova-mail), which is itself based on [maillab/cloud-mail](https://github.com/maillab/cloud-mail). It is **not a GitHub fork** (the repository has no fork link to upstream), but the code originates there.
+This project is derived from [beihaime/nova-mail](https://github.com/beihaime/nova-mail), which is itself based on [maillab/cloud-mail](https://github.com/maillab/cloud-mail).
 
 ## What's different from upstream
 

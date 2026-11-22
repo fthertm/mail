@@ -15,7 +15,7 @@ This project is derived from [beihaime/nova-mail](https://github.com/beihaime/no
 
 ## What's different from upstream
 
-This repository contains only:
+This repository mainly contains:
 
 1. **Rebranding** to Mail.
 2. **Two security fixes** for vulnerabilities found and fixed by Nemesis:
